@@ -2,64 +2,119 @@
 
 ## 1. 产品定位
 
-NewWorld 是一个灵活、有趣的多智能体情景模拟工具。用户把一段材料、一个事件或一个设定放进来，系统生成参与者、关系、动机与冲突，让这些角色在一个小世界里互动，最后帮助用户观察舆论、叙事、风险或决策可能怎样演化。
+NewWorld 是一个面向小说、剧本、游戏设定和长篇叙事资料的世界构建与剧情推演工具。用户输入剧情文本、人物设定、世界观设定、组织设定、历史事件等资料后，系统抽取重要节点和关系，构建可编辑的关系图谱与世界观档案，并基于时间线推演剧情发展走向。
 
-它不应该像严肃学术建模工具，而应该像一个好玩的分析实验室。适用场景包括：
+这里的“节点”不一定是人，也可以是组织、地点、国家、种族、物品、事件、规则、能力、信仰、灾难、秘密或任何会影响剧情的关键设定。
 
-- 政策、公共事件或舆论反应预演
-- 市场、竞品、品牌事件情景推演
-- 小说、游戏、剧本里的角色动态模拟
-- 社区、论坛、社交媒体话题走向测试
-- 团队决策、危机处理、桌面推演
+产品体验应像一个清晰、好用、有一点探索感的创作工作台，而不是学术建模软件。适用场景包括：
 
-## 2. MVP 目标
+- 小说剧情、人物设定、世界观设定整理
+- 长篇故事的人物关系图谱构建
+- 多势力、多地点、多事件的剧情发展推演
+- 不同时间点的人物状态和世界状态追踪
+- 作者手动补充人物、组织、事件和规则设定
+- 从已有设定中发现冲突、伏笔、矛盾和可能走向
+
+## 2. 必要需求
+
+当前阶段以用户明确提出的必要需求为核心：
+
+1. 抽取文字资料，包括小说剧情、人物设定、世界观设定等，构建重要节点关系图谱。点代表人物或其他重要设定，线代表关系。
+2. 根据抽取资料构建世界观设定，包括规则、地点、组织、历史、能力体系、阵营、物品、事件等。
+3. 根据关系图谱与世界观设定推演世界剧情发展走向。
+4. 除文字资料外，用户可以自主添加设定人物或其他重要节点。
+5. 通过设定时间轴查看不同时间点的人物信息、节点状态与剧情发展。
+6. 提供清晰的时间发展时间线。
+
+## 3. MVP 目标
 
 第一个可用版本要回答一个核心问题：
 
-> 给定一批资料和一个情景问题，里面有哪些关键角色，他们想要什么，他们会怎样互动，可能出现哪些结果？
+> 给定一批小说或世界观资料，当前世界里有哪些关键节点，它们之间是什么关系，在不同时间点状态如何，剧情可能怎样继续发展？
 
 MVP 应包含：
 
-- 文档或粘贴文本输入
-- 实体、关系、冲突抽取
-- 基于实体生成智能体
-- 按回合推进的互动模拟
-- 可视化角色关系图
-- 实时互动信息流
-- 最终情景报告
-- 可保存的模拟运行记录
+- 粘贴或导入文字资料
+- 抽取重要节点、节点类型、节点简介
+- 抽取节点之间的关系
+- 抽取世界观设定条目
+- 手动新增和编辑节点
+- 手动新增和编辑关系
+- 创建和编辑时间线事件
+- 查看不同时间点的节点状态
+- 基于图谱、设定和时间线推演剧情走向
+- 输出剧情推演报告
 
-## 3. 核心概念
+## 4. 核心概念
 
-### World / 世界
+### Project / 项目
 
-一次情景模拟的容器。它保存情景描述、输入资料、抽取结果、智能体、环境规则和运行历史。
+一个故事、小说、剧本或游戏世界的总容器。它保存所有资料、图谱、世界观、时间线、节点状态和推演记录。
 
-### Source / 来源
+### Source / 来源资料
 
-用户提供的输入材料，例如粘贴文本、Markdown、PDF 提取文本、网页快照、笔记或结构化 JSON。
+用户提供的原始材料，例如小说正文、剧情大纲、人物设定、世界观设定、组织设定、历史年表、章节摘要或 Markdown 文档。
 
-### Entity / 实体
+### Node / 重要节点
 
-从资料中抽取出的命名对象，可以是人物、组织、地点、政策、产品、事件、指标、社区或抽象概念。
+关系图谱中的点。节点不只代表人物，也可以代表组织、地点、国家、种族、物品、能力、规则、事件、秘密、阵营、神明、灾难等。
+
+节点应包含：
+
+- 名称
+- 类型
+- 简介
+- 别名
+- 标签
+- 重要程度
+- 来源引用
+- 当前状态
+- 可选的时间状态记录
 
 ### Relationship / 关系
 
-实体之间的有类型连接，例如支持、反对、资助、监管、竞争、依赖、影响、提及。
+关系图谱中的线。它连接两个节点，表示人物关系、组织隶属、敌对、同盟、血缘、师徒、持有、统治、影响、因果、地点归属、秘密关联等。
 
-### Agent / 智能体
+关系应包含：
 
-模拟中的主动参与者，可以从实体生成，也可以由用户手动创建。它拥有目标、信念、限制、记忆、表达风格、影响力和决策规则。
+- 起点节点
+- 终点节点
+- 关系类型
+- 关系描述
+- 强度或权重
+- 发生时间或有效时间段
+- 来源引用
+- 是否确定
 
-### Environment / 环境
+### LoreEntry / 世界观设定条目
 
-智能体互动发生的地方。早期版本可以是一个共享信息流；后续可以扩展为频道、新闻事件、市场指标、投票、私信等。
+从资料中抽取或由用户手动添加的设定条目。它用于承载世界规则，而不只是人物关系。
 
-### Run / 运行
+类型包括：
 
-一次具体的模拟执行。它记录配置、消息、状态变化、指标和最终报告。
+- 地理与地点
+- 历史与纪年
+- 组织与势力
+- 能力体系
+- 社会制度
+- 种族与文化
+- 物品与资源
+- 禁忌与规则
+- 已知伏笔或秘密
 
-## 4. 系统架构
+### TimelineEvent / 时间线事件
+
+发生在某个时间点或时间段的剧情、历史或设定事件。时间可以是现实日期，也可以是作品内纪年，例如“王历 142 年”“第三章之后”“灾变前十年”。
+
+### NodeStateSnapshot / 节点状态快照
+
+某个节点在某个时间点的状态。例如人物的位置、阵营、目标、伤势、关系变化、持有物、已知信息、心理状态等。
+
+### PredictionRun / 剧情推演
+
+一次基于当前图谱、世界观和时间线的推演。它记录输入假设、推演过程、可能剧情走向、关键触发点和风险提示。
+
+## 5. 系统架构
 
 建议初始技术栈：
 
@@ -67,179 +122,200 @@ MVP 应包含：
 - 后端 API：Python FastAPI
 - 数据库：本地 MVP 使用 SQLite，后续迁移 PostgreSQL
 - ORM：SQLModel 或 SQLAlchemy
-- 任务执行：早期使用进程内任务，后续再引入队列
+- 可视化：关系图使用 React Flow，复杂图谱后续可评估 Cytoscape
+- 时间线：前端先自研轻量时间线组件，后续再引入专用库
 - LLM 接入：使用模型适配器接口，先支持 OpenAI，后续支持本地模型
-- 可视化：关系图使用 React Flow 或 Cytoscape，互动流使用普通组件
+- 测试：默认使用 mock LLM provider
 
 高层模块：
 
 ```text
 frontend/
-  应用外壳、世界编辑器、关系图视图、信息流视图、报告视图
+  应用外壳、资料输入、图谱视图、设定库、时间线、推演报告
 
 backend/
-  API 路由、应用服务、模拟引擎、模型适配器
+  API 路由、应用服务、模型适配器、持久化
 
-storage/
-  数据模型、迁移、仓储层
+backend/app/engine/
+  资料抽取、图谱构建、设定抽取、时间线抽取、剧情推演、报告生成
 
-engine/
-  抽取、智能体生成、模拟循环、报告生成
+backend/app/prompts/
+  extract_nodes.md、extract_lore.md、extract_timeline.md、predict_plot.md
 
 docs/
   架构、产品说明、API 说明
 ```
 
-## 5. 后端模块设计
+## 6. 后端模块设计
 
 ### API 层
 
-职责：
-
-- 接收资料和情景提示词
-- 创建和更新世界
-- 启动模拟运行
-- 流式返回或轮询运行进度
-- 返回关系图、信息流、指标和报告
-
 初始接口：
 
-- `POST /worlds`
-- `GET /worlds`
-- `GET /worlds/{world_id}`
-- `POST /worlds/{world_id}/sources`
-- `POST /worlds/{world_id}/extract`
-- `POST /worlds/{world_id}/agents`
-- `POST /worlds/{world_id}/runs`
-- `GET /runs/{run_id}`
-- `GET /runs/{run_id}/events`
+- `POST /projects`
+- `GET /projects`
+- `GET /projects/{project_id}`
+- `POST /projects/{project_id}/sources`
+- `POST /projects/{project_id}/extract`
+- `GET /projects/{project_id}/graph`
+- `POST /projects/{project_id}/nodes`
+- `PATCH /nodes/{node_id}`
+- `POST /projects/{project_id}/relationships`
+- `PATCH /relationships/{relationship_id}`
+- `GET /projects/{project_id}/lore`
+- `POST /projects/{project_id}/lore`
+- `GET /projects/{project_id}/timeline`
+- `POST /projects/{project_id}/timeline-events`
+- `GET /projects/{project_id}/node-states?time=...`
+- `POST /projects/{project_id}/predictions`
+- `GET /predictions/{prediction_id}`
 
-### 抽取服务
+### 资料抽取服务
 
 输入：
 
 - 来源文本
-- 可选的用户关注点
+- 来源类型：剧情、人物设定、世界观设定、章节摘要、其他
+- 可选关注点
 - 抽取 schema 版本
 
 输出：
 
-- 实体
-- 关系
-- 主张
-- 不确定点
+- 重要节点
+- 节点关系
+- 世界观设定条目
+- 时间线事件
+- 节点状态快照
+- 不确定项和待确认项
 - 来源引用
 
-MVP 可以先使用 LLM 输出 JSON，再进行 schema 校验。规则启发式抽取只作为演示和测试的兜底，不作为主路径。
+### 图谱服务
 
-### 智能体服务
+职责：
 
-从实体和用户编辑内容创建智能体。
+- 合并重复节点
+- 维护节点类型和重要程度
+- 维护关系类型、强度和有效时间段
+- 支持用户手动新增、编辑、合并、删除节点和关系
+- 为前端提供图谱布局所需的数据
 
-智能体字段：
+### 世界观设定服务
 
-- 名称
-- 代表的实体
-- 角色
-- 目标
-- 信念
-- 限制
-- 立场
-- 影响力
-- 表达风格
-- 记忆摘要
+职责：
 
-### 模拟引擎
+- 管理 LoreEntry
+- 将设定条目关联到节点和时间线事件
+- 检测设定冲突，例如同一地点归属、能力规则、历史事件顺序矛盾
+- 为剧情推演提供世界规则上下文
 
-模拟循环必须清晰、可检查、可复放：
+### 时间线服务
 
-1. 根据世界状态构建当前回合上下文。
-2. 选择本回合活跃智能体。
-3. 生成每个智能体的行动。
-4. 应用环境反馈。
-5. 更新记忆和指标。
-6. 存储事件。
-7. 回合结束或达到收敛条件后停止。
+职责：
 
-初始行动类型：
+- 管理 TimelineEvent
+- 支持作品内时间表达
+- 根据时间点查询节点状态
+- 根据事件更新节点状态快照
+- 为前端提供清晰时间线视图
 
-- post / 发帖
-- reply / 回复
-- amplify / 放大
-- challenge / 质疑
-- ask_for_evidence / 要求证据
-- form_alliance / 结盟
-- change_stance / 改变立场
+### 剧情推演服务
+
+推演不应只让智能体聊天，而应围绕叙事因果展开：
+
+1. 读取当前图谱、世界观设定和时间线。
+2. 识别关键冲突、未解决目标、伏笔和风险。
+3. 生成若干可能剧情分支。
+4. 对每个分支说明触发条件、参与节点、关系变化和世界影响。
+5. 给出下一步剧情建议和需要补充的设定。
 
 ### 报告服务
 
 输出：
 
-- 结果预测
-- 最强叙事
-- 关键角色变化
-- 冲突点
-- 不确定性驱动因素
-- 推荐的下一轮情景
-- 对来源和运行事件的引用
+- 剧情走向摘要
+- 可能分支
+- 关键触发事件
+- 受影响人物或节点
+- 关系变化
+- 世界观影响
+- 时间线变化
+- 设定矛盾或空缺
+- 来源引用
 
-## 6. 前端体验
+## 7. 前端体验
 
-第一屏应该是实际工作台，而不是营销页。
+第一屏应该是创作工作台。
 
-主布局：
+主布局建议：
 
-- 左侧：世界列表、资料、运行控制
-- 中间：关系图和信息流标签页
-- 右侧：选中实体或智能体详情
-- 底部或独立标签页：报告和运行对比
+- 左侧：项目、来源资料、抽取按钮、推演按钮
+- 中间：图谱 / 时间线 / 设定库 / 推演报告 标签页
+- 右侧：选中节点、关系、事件或设定条目的详情编辑面板
 
-关键操作：
+核心视图：
 
-- 粘贴资料
-- 运行抽取
-- 查看和编辑实体
-- 查看和编辑智能体
-- 启动模拟
-- 观察信息流更新
-- 打开最终报告
-- 修改一个假设并复制运行
+### 图谱视图
 
-视觉和文案风格：
+- 点代表人物或重要设定节点
+- 线代表关系
+- 支持按节点类型、阵营、时间点过滤
+- 点击点查看节点设定和时间状态
+- 点击线查看关系说明和有效时间
 
-- 简单、活泼、清楚
-- 避免过度学术化
-- 使用熟悉词汇，例如 World、People、Feed、Map、Runs、Report，或中文界面中的世界、人物、信息流、地图、运行、报告
+### 设定库视图
 
-## 7. 数据模型草案
+- 按地理、历史、组织、能力体系、社会制度、物品、秘密等分类查看
+- 支持手动新增设定条目
+- 支持关联到节点和时间线事件
+
+### 时间线视图
+
+- 展示清晰的时间发展线
+- 支持作品内时间表达
+- 点击事件查看参与节点和影响
+- 支持选择时间点，刷新人物状态和图谱关系
+
+### 推演报告视图
+
+- 展示剧情可能走向
+- 展示分支、触发条件和影响节点
+- 标记设定矛盾、空缺和需要用户确认的问题
+
+## 8. 数据模型草案
 
 ```text
-World
+Project
   id, name, description, created_at, updated_at
 
 Source
-  id, world_id, type, title, content, metadata, created_at
+  id, project_id, type, title, content, metadata, created_at
 
-Entity
-  id, world_id, name, type, summary, confidence, source_refs
+Node
+  id, project_id, name, type, aliases, summary, tags, importance, current_state, confidence, source_refs
 
 Relationship
-  id, world_id, source_entity_id, target_entity_id, type, summary, weight, confidence, source_refs
+  id, project_id, source_node_id, target_node_id, type, summary, weight, confidence, valid_from, valid_to, source_refs
 
-Agent
-  id, world_id, entity_id, name, role, goals, beliefs, constraints, stance, influence, style, memory
+LoreEntry
+  id, project_id, type, title, content, related_node_ids, related_event_ids, confidence, source_refs
 
-Run
-  id, world_id, status, config, started_at, completed_at
+TimelineEvent
+  id, project_id, title, time_label, time_order, description, participant_node_ids, related_lore_ids, source_refs
 
-RunEvent
-  id, run_id, round, agent_id, action_type, content, state_delta, metrics, created_at
+NodeStateSnapshot
+  id, project_id, node_id, time_label, time_order, state, location, faction, goals, knowledge, source_refs
+
+PredictionRun
+  id, project_id, status, premise, config, created_at, completed_at
+
+PredictionBranch
+  id, prediction_run_id, title, summary, trigger_conditions, affected_node_ids, relationship_changes, timeline_changes, confidence
 
 Report
-  id, run_id, summary, sections, citations, created_at
+  id, prediction_run_id, summary, sections, citations, created_at
 ```
 
-## 8. LLM 适配器设计
+## 9. LLM 适配器设计
 
 使用模型适配器，避免应用被某个模型供应商绑定。
 
@@ -257,19 +333,21 @@ embed(texts)
 - 本地模型适配器
 - 测试用 mock 适配器
 
-所有模型输出进入存储前都必须经过校验。
+所有模型输出进入存储前都必须经过 schema 校验。
 
-## 9. Prompt 边界
+## 10. Prompt 边界
 
-Prompt 应该版本化，并被当作产品代码维护。
+Prompt 应版本化，并被当作产品代码维护。
 
 建议 prompt 文件：
 
 ```text
-backend/prompts/extract_world.md
-backend/prompts/create_agents.md
-backend/prompts/agent_turn.md
-backend/prompts/summarize_run.md
+backend/app/prompts/extract_nodes.md
+backend/app/prompts/extract_lore.md
+backend/app/prompts/extract_timeline.md
+backend/app/prompts/merge_graph.md
+backend/app/prompts/predict_plot.md
+backend/app/prompts/summarize_prediction.md
 ```
 
 每个 prompt 应定义：
@@ -280,14 +358,14 @@ backend/prompts/summarize_run.md
 - 约束
 - 只在必要时加入示例
 
-## 10. 开发阶段
+## 11. 开发阶段
 
 ### Phase 0：地基
 
 - 初始化仓库
-- 架构设计书
-- 项目专用 skill
-- 基础项目骨架
+- 中文架构设计书
+- 项目内 Codex skill
+- 明确叙事世界建模需求
 
 ### Phase 1：本地 MVP
 
@@ -295,63 +373,67 @@ backend/prompts/summarize_run.md
 - React 工作台
 - SQLite 持久化
 - 粘贴文本输入
-- LLM 抽取
-- 简单智能体生成
-- 回合模拟
-- 报告生成
+- 节点与关系抽取
+- 世界观设定抽取
+- 时间线事件抽取
+- 手动新增节点和关系
+- 图谱视图
+- 时间线视图
+- 剧情推演报告
 
-### Phase 2：更好用的世界
+### Phase 2：更好用的创作工作台
 
-- 可编辑关系图
-- 保存运行
-- 运行对比
-- 来源引用
-- prompt 和版本追踪
-- 流式进度
+- 图谱节点合并
+- 设定冲突检测
+- 时间点状态查询
+- 运行历史保存
+- 推演分支对比
+- 来源引用跳转
 
-### Phase 3：更丰富的模拟
+### Phase 3：更丰富的叙事推演
 
-- 私密频道
+- 多分支剧情树
+- 伏笔追踪
+- 阵营与势力变化
+- 角色目标演化
 - 事件注入
-- 指标和投票
-- 记忆演化
-- 情景分支
-- 批量实验
+- 批量推演实验
 
 ### Phase 4：协作和部署
 
 - 托管部署
 - 用户账号
-- 共享世界
-- 导出报告
+- 项目共享
+- 导出图谱、时间线和报告
 - 远程模型配置
 
-## 11. 测试策略
+## 12. 测试策略
 
 测试层级：
 
 - schema 校验和确定性服务的单元测试
 - prompt 输出解析器的快照测试
-- 世界和运行流程的 API 测试
-- 前端主要工作台组件测试
-- 创建世界 -> 抽取 -> 模拟 -> 报告 的端到端烟测
+- 项目、来源、图谱、时间线和推演流程的 API 测试
+- 前端图谱、时间线、设定库组件测试
+- 创建项目 -> 添加资料 -> 抽取图谱 -> 查看时间线 -> 推演剧情 -> 生成报告的端到端烟测
 
 CI 中默认使用 mock LLM。真实模型测试应显式开启，并要求配置环境变量。
 
-## 12. 工程原则
+## 13. 工程原则
 
-- 面向模型的 schema 必须清晰。
-- 原始模型输出只作为调试材料，不直接当作可信状态。
-- 模拟步骤必须可复放。
-- 用户编辑状态和生成建议要分开存储。
-- 优先做窄而有用的 MVP，不做宽而空的演示。
-- 报告要能解释，并引用来源材料和运行事件。
+- 节点不等于人物，必须支持所有重要设定对象。
+- 图谱、世界观设定和时间线是同等重要的一等数据。
+- 用户手动添加和编辑的设定优先级高于模型抽取建议。
+- 模型输出只作为建议，入库前必须校验。
+- 每个抽取结果应保留来源引用。
+- 时间线要能驱动不同时间点的节点状态和关系变化。
+- 剧情推演要解释因果，不只生成一段故事文本。
 
-## 13. 近期下一步
+## 14. 近期下一步
 
-创建第一个可运行骨架：
+创建第一个可运行骨架，并优先支持叙事世界建模闭环：
 
 - `backend/` FastAPI 应用，包含健康检查
 - `frontend/` Vite React 应用，包含简单工作台外壳
-- 暂不强制加入 `docker-compose.yml`
-- 在 README 中记录开发命令
+- 数据模型先覆盖 Project、Source、Node、Relationship、LoreEntry、TimelineEvent
+- README 中记录开发命令
