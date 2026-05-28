@@ -49,7 +49,7 @@ export default function App() {
     const nodes = graph.nodes.map((node, index) => {
       const angle = graph.nodes.length <= 1 ? 0 : (Math.PI * 2 * index) / graph.nodes.length - Math.PI / 2;
       const connected = degree.get(node.id) ?? 0;
-      const radialBias = connected > 1 ? 0.88 : 1;
+      const radialBias = connected > 1 ? 0.86 : 1;
       return {
         ...node,
         connected,
@@ -283,7 +283,15 @@ export default function App() {
             <input accept=".txt,.md,.markdown,text/plain,text/markdown" multiple name="sourceFiles" type="file" />
             <button disabled={busy || !activeProjectId} type="submit">导入文件</button>
           </form>
-          <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取</p>
+                    <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取</p>
+          <ul className="source-list">
+            {sources.length === 0 ? <li>暂无导入资料</li> : sources.map((source) => (
+              <li key={source.id}>
+                <strong>{source.title}</strong>
+                <span>{source.type} · {source.extracted_at ? "已抽取" : "待抽取"}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       </aside>
 
@@ -360,7 +368,7 @@ export default function App() {
                       const related = selectedNode && selectedRelationships.some((relationship) => relationship.source_node_id === node.id || relationship.target_node_id === node.id);
                       return (
                         <g className={selected ? "graph-node selected" : related ? "graph-node related" : "graph-node"} key={node.id} onClick={() => setSelectedNodeId(node.id)} role="button" tabIndex={0}>
-                          <circle cx={node.x} cy={node.y} r={Math.min(34, 20 + node.connected * 3)} />
+                          <circle cx={node.x} cy={node.y} r={(selected || related) ? Math.min(46, 30 + node.connected * 4) : Math.min(32, 19 + node.connected * 3)} />
                           <text x={node.x} y={node.y + 4}>{node.name}</text>
                           <text className="node-type" x={node.x} y={node.y + 24}>{node.type}</text>
                         </g>
@@ -411,10 +419,4 @@ export default function App() {
     </main>
   );
 }
-
-
-
-
-
-
 

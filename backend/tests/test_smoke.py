@@ -101,6 +101,12 @@ def test_extract_project_from_source_flow() -> None:
     node_names = {node["name"] for node in graph_response.json()["nodes"]}
     assert "林曜" in node_names
     assert "北境王印" in node_names
+    assert "第一章" not in node_names
+
+    graph = graph_response.json()
+    relationship = graph["relationships"][0]
+    assert "存在" in relationship["summary"]
+    assert "第一章，林曜进入雾港寻找北境王印" not in relationship["summary"]
 
     lore_response = client.get(f"/api/projects/{project['id']}/lore")
     assert lore_response.status_code == 200

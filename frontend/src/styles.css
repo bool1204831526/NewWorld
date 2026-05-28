@@ -454,4 +454,31 @@ select {
 .report strong {
   color: var(--ink);
 }
+.source-list {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.source-list li {
+  display: grid;
+  gap: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: #fbfcfd;
+}
+
+.source-list strong {
+  font-size: 13px;
+}
+
+.source-list span {
+  color: var(--muted);
+  font-size: 12px;
+}
 
