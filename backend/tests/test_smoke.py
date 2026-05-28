@@ -148,3 +148,41 @@ def test_upload_source_file_flow() -> None:
     assert extract_response.status_code == 200
     assert extract_response.json()["processed_sources"] == 1
 
+def test_delete_node_removes_relationships() -> None:
+    project_response = client.post("/api/projects", json={"name": "删除测试"})
+    assert project_response.status_code == 200
+    project = project_response.json()
+
+    left_response = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "林曜", "type": "人物", "summary": "北境少年。"},
+    )
+    right_response = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "北境王印", "type": "物品", "summary": "继承权凭证。"},
+    )
+    assert left_response.status_code == 200
+    assert right_response.status_code == 200
+    left = left_response.json()
+    right = right_response.json()
+
+    relationship_response = client.post(
+        f"/api/projects/{project['id']}/relationships",
+        json={
+            "source_node_id": left["id"],
+            "target_node_id": right["id"],
+            "type": "追寻",
+            "summary": "林曜寻找北境王印。",
+        },
+    )
+    assert relationship_response.status_code == 200
+
+    delete_response = client.delete(f"/api/projects/{project['id']}/nodes/{left['id']}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+
+    graph_response = client.get(f"/api/projects/{project['id']}/graph")
+    graph = graph_response.json()
+    assert {node["id"] for node in graph["nodes"]} == {right["id"]}
+    assert graph["relationships"] == []
+

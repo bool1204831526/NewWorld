@@ -121,6 +121,8 @@ export const api = {
     request<ExtractionResult>(`/projects/${projectId}/extract`, { method: "POST" }),
   addNode: (projectId: string, payload: { name: string; type: string; summary: string }) =>
     request<NodeItem>(`/projects/${projectId}/nodes`, { method: "POST", body: JSON.stringify(payload) }),
+  deleteNode: (projectId: string, nodeId: string) =>
+    request<{ deleted: boolean; node_id: string }>(`/projects/${projectId}/nodes/${nodeId}`, { method: "DELETE" }),
   addRelationship: (
     projectId: string,
     payload: { source_node_id: string; target_node_id: string; type: string; summary: string },
@@ -133,4 +135,5 @@ export const api = {
   createPrediction: (projectId: string) =>
     request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
 };
+
 

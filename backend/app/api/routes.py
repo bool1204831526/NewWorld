@@ -143,6 +143,15 @@ def add_node(project_id: str, payload: CreateNodeRequest) -> Node:
     return store.save_node(node)
 
 
+
+@router.delete("/projects/{project_id}/nodes/{node_id}")
+def delete_node(project_id: str, node_id: str) -> dict:
+    ensure_project(project_id)
+    deleted = store.delete_node(project_id, node_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="节点不存在")
+    return {"deleted": True, "node_id": node_id}
+
 @router.post("/projects/{project_id}/relationships")
 def add_relationship(project_id: str, payload: CreateRelationshipRequest) -> Relationship:
     ensure_project(project_id)
@@ -201,4 +210,5 @@ def create_prediction(project_id: str) -> PredictionReport:
             "哪些世界观规则会限制剧情走向？",
         ],
     )
+
 

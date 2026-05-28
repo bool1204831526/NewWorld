@@ -255,6 +255,18 @@ export default function App() {
       setStatus(`抽取完成：处理 ${result.processed_sources} 份，跳过 ${result.skipped_sources} 份；新增节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
     }, "抽取完成");
   }
+
+  function handleDeleteSelectedNode() {
+    if (!selectedNode) return;
+    const confirmed = window.confirm(`删除节点“${selectedNode.name}”？与它相连的关系也会一并删除。`);
+    if (!confirmed) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      await api.deleteNode(projectId, selectedNode.id);
+      setSelectedNodeId("");
+      await refreshProject(projectId);
+    }, "节点已删除");
+  }
   function handlePrediction() {
     runAction(async () => {
       const projectId = requireProject();
@@ -442,5 +454,6 @@ export default function App() {
     </main>
   );
 }
+
 
 

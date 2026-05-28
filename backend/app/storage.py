@@ -142,6 +142,24 @@ class SQLiteStore:
     def list_nodes(self, project_id: str) -> List[Node]:
         return self._list_by_project(Node, "nodes", project_id, "id ASC")
 
+    def get_node(self, node_id: str) -> Optional[Node]:
+        return self._get_one(Node, "nodes", node_id)
+
+    def delete_node(self, project_id: str, node_id: str) -> bool:
+        with self.connect() as connection:
+            node_row = connection.execute(
+                "SELECT id FROM nodes WHERE id = ? AND project_id = ?",
+                (node_id, project_id),
+            ).fetchone()
+            if not node_row:
+                return False
+            connection.execute(
+                "DELETE FROM relationships WHERE project_id = ? AND (source_node_id = ? OR target_node_id = ?)",
+                (project_id, node_id, node_id),
+            )
+            connection.execute("DELETE FROM nodes WHERE id = ? AND project_id = ?", (node_id, project_id))
+        return True
+
     def save_relationship(self, relationship: Relationship) -> Relationship:
         with self.connect() as connection:
             connection.execute(
@@ -209,4 +227,5 @@ def parse_many(model: Type[T], rows: Sequence[sqlite3.Row]) -> List[T]:
     return [parse_one(model, row["data"]) for row in rows]
 
 store = SQLiteStore()
+
 
