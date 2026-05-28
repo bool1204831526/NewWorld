@@ -125,14 +125,18 @@ export default function App() {
     setSelectedNodeId((current) => graph.nodes.some((node) => node.id === current) ? current : graph.nodes[0]?.id ?? "");
   }, [graph.nodes]);
 
-  async function runAction(action: () => Promise<void>, doneMessage: string) {
+  async function runAction(action: () => Promise<void>, doneMessage: string, alertOnError = false) {
     setBusy(true);
     setStatus("处理中...");
     try {
       await action();
       setStatus(doneMessage);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "操作失败");
+      const message = error instanceof Error ? error.message : "操作失败";
+      setStatus(message);
+      if (alertOnError) {
+        window.alert(message);
+      }
     } finally {
       setBusy(false);
     }
@@ -273,9 +277,9 @@ export default function App() {
     runAction(async () => {
       const projectId = requireProject();
       const llmPayload = extractMode === "llm" ? {
-        api_base: String((document.querySelector("[name=llmApiBase]") as HTMLInputElement)?.value || "").trim(),
-        api_key: String((document.querySelector("[name=llmApiKey]") as HTMLInputElement)?.value || "").trim(),
-        model: String((document.querySelector("[name=llmModel]") as HTMLInputElement)?.value || "").trim(),
+        api_base: llmApiBase.trim(),
+        api_key: llmApiKey.trim(),
+        model: llmModel.trim(),
       } : null;
       if (extractMode === "llm" && (!llmPayload?.api_base || !llmPayload.api_key || !llmPayload.model)) {
         throw new Error("请填写 LLM API Base、API Key 和模型名");
@@ -288,7 +292,7 @@ export default function App() {
       await refreshProject(projectId);
       setReport(null);
       setStatus(`抽取完成：处理 ${result.processed_sources} 份，跳过 ${result.skipped_sources} 份；新增节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
-    }, "抽取完成");
+    }, "抽取完成", true);
   }
 
   function handleDeleteSelectedNode() {
@@ -511,9 +515,4 @@ export default function App() {
     </main>
   );
 }
-
-
-
-
-
 

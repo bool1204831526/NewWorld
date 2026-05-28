@@ -231,3 +231,10 @@ def test_extract_selected_sources_only() -> None:
     assert sources[first["id"]]["extracted_at"] is None
     assert sources[second["id"]]["extracted_at"] is not None
 
+def test_llm_extract_requires_config() -> None:
+    project_response = client.post("/api/projects", json={"name": "LLM错误提示测试"})
+    project = project_response.json()
+    response = client.post(f"/api/projects/{project['id']}/extract", json={"mode": "llm"})
+    assert response.status_code == 400
+    assert "LLM 抽取需要填写 API 配置" in response.json()["detail"]
+

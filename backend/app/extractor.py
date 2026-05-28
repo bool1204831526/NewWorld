@@ -2,6 +2,7 @@
 
 import json
 import re
+import urllib.error
 import urllib.request
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set, Tuple
@@ -218,7 +219,6 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
             {"role": "user", "content": f"资料标题：{source.title}\n资料类型：{source.type}\n资料内容：\n{source.content}"},
         ],
         "temperature": 0.2,
-        "response_format": {"type": "json_object"},
     }
     request = urllib.request.Request(
         url,
@@ -229,13 +229,54 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=90) as response:
-        response_data = json.loads(response.read().decode("utf-8"))
-    content = response_data["choices"][0]["message"]["content"]
-    parsed = json.loads(content)
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            response_text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        error_body = error.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"LLM 接口返回 HTTP {error.code}：{extract_llm_error_message(error_body)}")
+    except urllib.error.URLError as error:
+        raise ValueError(f"无法连接 LLM 接口：{error.reason}")
+    except TimeoutError:
+        raise ValueError("LLM 请求超时，请检查网络或稍后重试")
+
+    try:
+        response_data = json.loads(response_text)
+        content = response_data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError(f"LLM 接口返回格式不符合 OpenAI Chat Completions：{error}")
+
+    try:
+        parsed = json.loads(strip_json_code_fence(content))
+    except json.JSONDecodeError as error:
+        preview = content[:300].replace("\n", " ")
+        raise ValueError(f"LLM 未返回合法 JSON：{error.msg}。返回片段：{preview}")
     if not isinstance(parsed, dict):
         raise ValueError("LLM 返回内容不是 JSON 对象")
     return parsed
+
+
+def extract_llm_error_message(error_body: str) -> str:
+    if not error_body:
+        return "无响应内容"
+    try:
+        data = json.loads(error_body)
+        if isinstance(data, dict):
+            error = data.get("error")
+            if isinstance(error, dict):
+                return str(error.get("message") or error)
+            return str(data.get("message") or data)
+    except json.JSONDecodeError:
+        pass
+    return error_body[:500]
+
+
+def strip_json_code_fence(content: str) -> str:
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
 def extract_nodes_from_source(project_id: str, source: Source, existing_names: Set[str]) -> List[Node]:
     candidates: Dict[str, str] = {}
     for name, description in NAME_PATTERN.findall(source.content):
@@ -385,7 +426,4 @@ def is_valid_name(name: str) -> bool:
     if re.search(r"[的是了和与及在为有被把到中上下一二三四五六七八九十]$", name) and len(name) > 4:
         return False
     return True
-
-
-
 
