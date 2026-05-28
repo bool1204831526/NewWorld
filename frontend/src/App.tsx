@@ -287,7 +287,8 @@ export default function App() {
       setSelectedNodeId(node.id);
       setGraphNodeQuery(`${node.name} · ${node.type}`);
       formElement.reset();
-    }, "节点已添加");
+      setStatus(`节点已添加：${node.name}`);
+    }, `节点已添加：${name}`, true);
   }
 
   function handleAddRelationship(event: FormEvent<HTMLFormElement>) {
@@ -560,7 +561,7 @@ export default function App() {
                 <input name="nodeName" placeholder="名称，例如：林曜" />
                 <input name="nodeType" placeholder="类型，例如：人物 / 组织 / 物品" />
                 <textarea name="nodeSummary" placeholder="节点简介" />
-                <button disabled={busy || !activeProjectId} type="submit">添加节点</button>
+                <button disabled={busy || !activeProjectId} title={!activeProjectId ? "请先选择或创建项目" : ""} type="submit">添加节点</button>
               </form>
 
               <form className="stack" onSubmit={handleAddRelationship}>
