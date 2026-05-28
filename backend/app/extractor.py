@@ -3,6 +3,7 @@
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set, Tuple
@@ -202,7 +203,11 @@ def extract_source_with_llm(
 
 
 def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
-    api_base = config.api_base.rstrip("/")
+    api_base = validate_llm_api_base(config.api_base)
+    api_key = validate_llm_api_key(config.api_key)
+    model = config.model.strip()
+    if not model:
+        raise ValueError("LLM 模型名不能为空")
     url = f"{api_base}/chat/completions"
     prompt = (
         "你是小说资料结构化抽取器。请只返回 JSON，不要解释。"
@@ -213,7 +218,7 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
         "timeline_events: [{title,time_label,time_order,description}]。"
     )
     body = {
-        "model": config.model,
+        "model": model,
         "messages": [
             {"role": "system", "content": prompt},
             {"role": "user", "content": f"资料标题：{source.title}\n资料类型：{source.type}\n资料内容：\n{source.content}"},
@@ -224,7 +229,7 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
         url,
         data=json.dumps(body).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {config.api_key}",
+            "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
             "Accept": "application/json",
             "User-Agent": "NewWorld/0.1 OpenAI-Compatible-Client",
@@ -257,6 +262,28 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
         raise ValueError("LLM 返回内容不是 JSON 对象")
     return parsed
 
+
+def validate_llm_api_base(api_base: str) -> str:
+    value = api_base.strip().rstrip("/")
+    parsed = urllib.parse.urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("LLM API Base 必须是 http 或 https 接口地址")
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError:
+        raise ValueError("LLM API Base 不能包含中文或全角字符，请填写接口地址")
+    return value
+
+
+def validate_llm_api_key(api_key: str) -> str:
+    value = api_key.strip()
+    if not value:
+        raise ValueError("LLM API Key 不能为空")
+    try:
+        value.encode("latin-1")
+    except UnicodeEncodeError:
+        raise ValueError("LLM API Key 包含无法用于 HTTP 请求头的字符，请检查是否误粘贴了中文、全角字符或说明文字")
+    return value
 
 def extract_llm_error_message(error_body: str, status_code: Optional[int] = None) -> str:
     if not error_body:

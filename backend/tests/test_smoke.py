@@ -5,7 +5,7 @@ os.environ["NEWWORLD_DB_PATH"] = os.path.join(tempfile.gettempdir(), "newworld_t
 
 from fastapi.testclient import TestClient
 
-from app.extractor import extract_llm_error_message
+from app.extractor import extract_llm_error_message, validate_llm_api_base, validate_llm_api_key
 from app.main import app
 from app.storage import store
 
@@ -243,4 +243,23 @@ def test_llm_403_1010_error_has_actionable_hint() -> None:
     message = extract_llm_error_message("error code: 1010", 403)
     assert "当前运行环境" in message
     assert "Python/本地客户端" in message
+
+def test_llm_api_key_rejects_chinese_characters() -> None:
+    try:
+        validate_llm_api_key("sk-测试")
+    except ValueError as error:
+        assert "API Key" in str(error)
+        assert "中文" in str(error)
+    else:
+        raise AssertionError("expected invalid API key to raise")
+
+
+def test_llm_api_base_rejects_non_ascii_url() -> None:
+    try:
+        validate_llm_api_base("https://例子.com/v1")
+    except ValueError as error:
+        assert "API Base" in str(error)
+        assert "中文" in str(error)
+    else:
+        raise AssertionError("expected invalid API base to raise")
 
