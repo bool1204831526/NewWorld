@@ -52,6 +52,16 @@ export interface ExtractionResult {
   skipped_sources: number;
 }
 
+
+export interface ExtractProjectPayload {
+  source_ids?: string[];
+  mode?: "rules" | "llm";
+  llm?: {
+    api_base: string;
+    api_key: string;
+    model: string;
+  } | null;
+}
 export interface TimelineEvent {
   id: string;
   project_id: string;
@@ -115,10 +125,12 @@ export const api = {
     formData.append("type", type);
     return uploadRequest<Source[]>(`/projects/${projectId}/sources/upload`, formData);
   },
+  deleteSource: (projectId: string, sourceId: string) =>
+    request<{ deleted: boolean; source_id: string }>(`/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
   getGraph: (projectId: string) => request<GraphResponse>(`/projects/${projectId}/graph`),
   getLore: (projectId: string) => request<LoreEntry[]>(`/projects/${projectId}/lore`),
-  extractProject: (projectId: string) =>
-    request<ExtractionResult>(`/projects/${projectId}/extract`, { method: "POST" }),
+  extractProject: (projectId: string, payload: ExtractProjectPayload = {}) =>
+    request<ExtractionResult>(`/projects/${projectId}/extract`, { method: "POST", body: JSON.stringify(payload) }),
   addNode: (projectId: string, payload: { name: string; type: string; summary: string }) =>
     request<NodeItem>(`/projects/${projectId}/nodes`, { method: "POST", body: JSON.stringify(payload) }),
   deleteNode: (projectId: string, nodeId: string) =>
@@ -135,5 +147,6 @@ export const api = {
   createPrediction: (projectId: string) =>
     request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
 };
+
 
 

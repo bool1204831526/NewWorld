@@ -16,6 +16,11 @@ export default function App() {
   const [status, setStatus] = useState("准备就绪");
   const [busy, setBusy] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
+  const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const [extractMode, setExtractMode] = useState<"rules" | "llm">("rules");
+  const [llmApiBase, setLlmApiBase] = useState("https://api.openai.com/v1");
+  const [llmModel, setLlmModel] = useState("gpt-4o-mini");
+  const [llmApiKey, setLlmApiKey] = useState("");
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const relationshipLabels = useMemo(() => {
@@ -154,6 +159,7 @@ export default function App() {
       setEvents([]);
       setLoreEntries([]);
       setReport(null);
+      setSelectedSourceIds([]);
       formElement.reset();
     }, "项目已创建");
   }
@@ -246,10 +252,39 @@ export default function App() {
     }, "时间线事件已添加");
   }
 
+
+  function toggleSourceSelection(sourceId: string) {
+    setSelectedSourceIds((current) =>
+      current.includes(sourceId) ? current.filter((id) => id !== sourceId) : [...current, sourceId],
+    );
+  }
+
+  function handleDeleteSource(source: Source) {
+    const confirmed = window.confirm(`删除来源资料“${source.title}”？已抽取出的节点和关系不会自动删除。`);
+    if (!confirmed) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      await api.deleteSource(projectId, source.id);
+      setSelectedSourceIds((current) => current.filter((id) => id !== source.id));
+      await refreshProject(projectId);
+    }, "来源资料已删除");
+  }
   function handleExtractWorld() {
     runAction(async () => {
       const projectId = requireProject();
-      const result = await api.extractProject(projectId);
+      const llmPayload = extractMode === "llm" ? {
+        api_base: String((document.querySelector("[name=llmApiBase]") as HTMLInputElement)?.value || "").trim(),
+        api_key: String((document.querySelector("[name=llmApiKey]") as HTMLInputElement)?.value || "").trim(),
+        model: String((document.querySelector("[name=llmModel]") as HTMLInputElement)?.value || "").trim(),
+      } : null;
+      if (extractMode === "llm" && (!llmPayload?.api_base || !llmPayload.api_key || !llmPayload.model)) {
+        throw new Error("请填写 LLM API Base、API Key 和模型名");
+      }
+      const result = await api.extractProject(projectId, {
+        source_ids: selectedSourceIds,
+        mode: extractMode,
+        llm: llmPayload,
+      });
       await refreshProject(projectId);
       setReport(null);
       setStatus(`抽取完成：处理 ${result.processed_sources} 份，跳过 ${result.skipped_sources} 份；新增节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
@@ -309,7 +344,7 @@ export default function App() {
               <option>剧情资料</option><option>人物设定</option><option>世界观设定</option><option>章节摘要</option>
             </select>
             <textarea name="sourceContent" placeholder="粘贴小说剧情、人物设定、世界观设定或章节摘要。" />
-            <div className="button-row"><button disabled={busy || !activeProjectId} type="submit">保存资料</button><button disabled={busy || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">抽取世界</button></div>
+            <button disabled={busy || !activeProjectId} type="submit">保存资料</button>
           </form>
           <form className="stack upload-box" onSubmit={handleUploadSources}>
             <select name="uploadSourceType" defaultValue="剧情资料">
@@ -318,12 +353,29 @@ export default function App() {
             <input accept=".txt,.md,.markdown,text/plain,text/markdown" multiple name="sourceFiles" type="file" />
             <button disabled={busy || !activeProjectId} type="submit">导入文件</button>
           </form>
-          <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取</p>
+          <div className="extract-settings">
+            <div className="button-row">
+              <button className={extractMode === "rules" ? "active" : ""} onClick={() => setExtractMode("rules")} type="button">规则抽取</button>
+              <button className={extractMode === "llm" ? "active" : ""} onClick={() => setExtractMode("llm")} type="button">LLM 抽取</button>
+            </div>
+            {extractMode === "llm" ? (
+              <div className="llm-settings">
+                <input name="llmApiBase" onChange={(event) => setLlmApiBase(event.target.value)} placeholder="API Base，例如：https://api.openai.com/v1" value={llmApiBase} />
+                <input name="llmModel" onChange={(event) => setLlmModel(event.target.value)} placeholder="模型名，例如：gpt-4o-mini" value={llmModel} />
+                <input name="llmApiKey" onChange={(event) => setLlmApiKey(event.target.value)} placeholder="API Key，仅本次请求使用" type="password" value={llmApiKey} />
+              </div>
+            ) : null}
+            <button disabled={busy || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">抽取世界</button>
+          </div>
+          <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取 · 已选择 {selectedSourceIds.length || "全部待抽取"}</p>
           <ul className="source-list">
             {sources.length === 0 ? <li>暂无导入资料</li> : sources.map((source) => (
               <li key={source.id}>
-                <strong>{source.title}</strong>
-                <span>{source.type} · {source.extracted_at ? "已抽取" : "待抽取"}</span>
+                <label>
+                  <input checked={selectedSourceIds.includes(source.id)} onChange={() => toggleSourceSelection(source.id)} type="checkbox" />
+                  <span><strong>{source.title}</strong><small>{source.type} · {source.extracted_at ? "已抽取" : "待抽取"}</small></span>
+                </label>
+                <button className="danger subtle" disabled={busy} onClick={() => handleDeleteSource(source)} type="button">删除</button>
               </li>
             ))}
           </ul>
@@ -459,6 +511,8 @@ export default function App() {
     </main>
   );
 }
+
+
 
 
 

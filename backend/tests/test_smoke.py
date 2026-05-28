@@ -186,3 +186,48 @@ def test_delete_node_removes_relationships() -> None:
     assert {node["id"] for node in graph["nodes"]} == {right["id"]}
     assert graph["relationships"] == []
 
+def test_delete_source_flow() -> None:
+    project_response = client.post("/api/projects", json={"name": "来源删除测试"})
+    project = project_response.json()
+    source_response = client.post(
+        f"/api/projects/{project['id']}/sources",
+        json={"title": "临时资料", "type": "剧情资料", "content": "林曜：北境少年。"},
+    )
+    source = source_response.json()
+
+    delete_response = client.delete(f"/api/projects/{project['id']}/sources/{source['id']}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+
+    sources_response = client.get(f"/api/projects/{project['id']}/sources")
+    assert sources_response.json() == []
+
+
+def test_extract_selected_sources_only() -> None:
+    project_response = client.post("/api/projects", json={"name": "选择抽取测试"})
+    project = project_response.json()
+    first_response = client.post(
+        f"/api/projects/{project['id']}/sources",
+        json={"title": "资料一", "type": "剧情资料", "content": "林曜：北境少年，寻找王印。王印：继承凭证。林曜寻找王印。"},
+    )
+    second_response = client.post(
+        f"/api/projects/{project['id']}/sources",
+        json={"title": "资料二", "type": "剧情资料", "content": "灰塔：旧术组织。旧术：被禁用的能力。灰塔掌握旧术。"},
+    )
+    first = first_response.json()
+    second = second_response.json()
+
+    extract_response = client.post(
+        f"/api/projects/{project['id']}/extract",
+        json={"source_ids": [second["id"]], "mode": "rules"},
+    )
+    assert extract_response.status_code == 200
+    result = extract_response.json()
+    assert result["processed_sources"] == 1
+    assert result["skipped_sources"] == 0
+
+    sources_response = client.get(f"/api/projects/{project['id']}/sources")
+    sources = {source["id"]: source for source in sources_response.json()}
+    assert sources[first["id"]]["extracted_at"] is None
+    assert sources[second["id"]]["extracted_at"] is not None
+

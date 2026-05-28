@@ -537,5 +537,45 @@ button.danger:hover {
   color: #fff;
   background: var(--red);
 }
+.extract-settings,
+.llm-settings {
+  display: grid;
+  gap: 8px;
+}
 
+.button-row button.active {
+  border-color: var(--blue);
+  color: #fff;
+  background: var(--blue);
+}
+
+.source-list li {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.source-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.source-list input[type="checkbox"] {
+  width: 16px;
+  min-height: 16px;
+}
+
+.source-list small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+button.subtle {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
 

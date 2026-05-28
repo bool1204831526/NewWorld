@@ -181,6 +181,17 @@ class TimelineEvent(BaseModel):
             participant_node_ids=participant_node_ids,
         )
 
+
+class LLMExtractionConfig(BaseModel):
+    api_base: str = "https://api.openai.com/v1"
+    api_key: str = Field(min_length=1)
+    model: str = Field(default="gpt-4o-mini", min_length=1)
+
+
+class ExtractProjectRequest(BaseModel):
+    source_ids: List[str] = []
+    mode: str = "rules"
+    llm: Optional[LLMExtractionConfig] = None
 class GraphResponse(BaseModel):
     nodes: List[Node]
     relationships: List[Relationship]
@@ -200,4 +211,5 @@ class ExtractionResult(BaseModel):
     created_timeline_events: int
     processed_sources: int
     skipped_sources: int
+
 

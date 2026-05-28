@@ -1,10 +1,12 @@
 ﻿from __future__ import annotations
 
+import json
 import re
+import urllib.request
 from datetime import datetime
-from typing import Dict, Iterable, List, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from app.schemas import LoreEntry, Node, Relationship, Source, TimelineEvent
+from app.schemas import LLMExtractionConfig, LoreEntry, Node, Relationship, Source, TimelineEvent
 from app.storage import SQLiteStore
 
 NODE_TYPES = {
@@ -44,10 +46,18 @@ WEAK_ENTITY_NAMES = {
     "剧情", "资料", "设定", "世界观", "人物设定", "章节摘要", "内容", "故事",
 }
 
-def extract_world(project_id: str, store: SQLiteStore) -> Tuple[int, int, int, int, int, int]:
+def extract_world(
+    project_id: str,
+    store: SQLiteStore,
+    source_ids: Optional[List[str]] = None,
+    mode: str = "rules",
+    llm_config: Optional[LLMExtractionConfig] = None,
+) -> Tuple[int, int, int, int, int, int]:
     all_sources = store.list_sources(project_id)
-    pending_sources = [source for source in all_sources if source.extracted_at is None]
-    skipped_sources = len(all_sources) - len(pending_sources)
+    selected_source_ids = set(source_ids or [])
+    candidate_sources = [source for source in all_sources if not selected_source_ids or source.id in selected_source_ids]
+    pending_sources = [source for source in candidate_sources if source.extracted_at is None]
+    skipped_sources = len(candidate_sources) - len(pending_sources)
     existing_nodes = {node.name: node for node in store.list_nodes(project_id)}
     existing_relationship_keys = {
         (relationship.source_node_id, relationship.target_node_id, relationship.type)
@@ -67,32 +77,47 @@ def extract_world(project_id: str, store: SQLiteStore) -> Tuple[int, int, int, i
     created_events: List[TimelineEvent] = []
 
     for source in pending_sources:
-        source_nodes = extract_nodes_from_source(project_id, source, set(existing_nodes))
+        if mode == "llm":
+            if not llm_config:
+                raise ValueError("LLM 抽取需要 API 配置")
+            extracted = extract_source_with_llm(project_id, source, existing_nodes, llm_config)
+            source_nodes = extracted["nodes"]
+            source_lore = extracted["lore"]
+            source_events = extracted["events"]
+            source_relationships = extracted["relationships"]
+        else:
+            source_nodes = extract_nodes_from_source(project_id, source, set(existing_nodes))
+            source_lore = extract_lore_from_source(project_id, source)
+            source_events = extract_timeline_from_source(project_id, source, existing_nodes)
+            source_relationships = []
         for node in source_nodes:
             saved = store.save_node(node)
             existing_nodes[saved.name] = saved
             created_nodes.append(saved)
 
-        for entry in extract_lore_from_source(project_id, source):
+        if mode != "llm":
+            source_relationships = extract_relationships_from_source(project_id, source, existing_nodes)
+
+        for entry in source_lore:
             key = (entry.type, entry.title, entry.content)
             if key not in existing_lore_keys:
                 created_lore.append(store.save_lore_entry(entry))
                 existing_lore_keys.add(key)
 
-        for event in extract_timeline_from_source(project_id, source, existing_nodes):
+        for event in source_events:
             key = (event.time_label, event.title, event.description)
             if key not in existing_event_keys:
                 created_events.append(store.save_timeline_event(event))
                 existing_event_keys.add(key)
 
-        for relationship in extract_relationships_from_source(project_id, source, existing_nodes):
+        for relationship in source_relationships:
             key = (relationship.source_node_id, relationship.target_node_id, relationship.type)
             if key not in existing_relationship_keys:
                 created_relationships.append(store.save_relationship(relationship))
                 existing_relationship_keys.add(key)
 
         source.extracted_at = datetime.utcnow()
-        source.extraction_version = "rules-v2"
+        source.extraction_version = "llm-v1" if mode == "llm" else "rules-v2"
         store.mark_source_extracted(source)
 
     return (
@@ -104,6 +129,113 @@ def extract_world(project_id: str, store: SQLiteStore) -> Tuple[int, int, int, i
         skipped_sources,
     )
 
+
+def extract_source_with_llm(
+    project_id: str,
+    source: Source,
+    existing_nodes: Dict[str, Node],
+    config: LLMExtractionConfig,
+) -> Dict[str, List]:
+    payload = call_llm_extractor(source, config)
+    nodes: List[Node] = []
+    node_by_name = dict(existing_nodes)
+    for item in payload.get("nodes", [])[:40]:
+        name = normalize_name(str(item.get("name", "")))
+        summary = normalize_description(str(item.get("summary", "")))
+        if not is_describable_entity(name, summary) or name in node_by_name:
+            continue
+        node = Node.create(project_id=project_id, name=name, type=str(item.get("type") or infer_node_type(name, summary)), summary=summary)
+        node.confidence = float(item.get("confidence") or 0.82)
+        node.source_refs = [source.id]
+        nodes.append(node)
+        node_by_name[name] = node
+
+    relationships: List[Relationship] = []
+    for item in payload.get("relationships", [])[:80]:
+        source_name = normalize_name(str(item.get("source") or item.get("source_name") or ""))
+        target_name = normalize_name(str(item.get("target") or item.get("target_name") or ""))
+        left = node_by_name.get(source_name)
+        right = node_by_name.get(target_name)
+        if not left or not right or left.id == right.id:
+            continue
+        relation = Relationship.create(
+            project_id=project_id,
+            source_node_id=left.id,
+            target_node_id=right.id,
+            type=str(item.get("type") or "关联"),
+            summary=str(item.get("summary") or f"{left.name} 与 {right.name} 形成关联。"),
+        )
+        relation.confidence = float(item.get("confidence") or 0.72)
+        relation.source_refs = [source.id]
+        relationships.append(relation)
+
+    lore: List[LoreEntry] = []
+    for item in payload.get("lore", [])[:40]:
+        title = normalize_description(str(item.get("title") or item.get("type") or "设定"))[:40]
+        content = normalize_description(str(item.get("content") or ""))
+        if not content:
+            continue
+        entry = LoreEntry.create(project_id=project_id, type=str(item.get("type") or "设定"), title=title, content=content)
+        entry.confidence = float(item.get("confidence") or 0.72)
+        entry.source_refs = [source.id]
+        lore.append(entry)
+
+    events: List[TimelineEvent] = []
+    for index, item in enumerate(payload.get("timeline_events", []), start=1):
+        title = normalize_description(str(item.get("title") or "时间线事件"))[:40]
+        time_label = normalize_description(str(item.get("time_label") or "未标注"))[:30]
+        description = normalize_description(str(item.get("description") or title))
+        participant_ids = [node_by_name[name].id for name in node_by_name if name in description][:8]
+        event = TimelineEvent.create(
+            project_id=project_id,
+            title=title,
+            time_label=time_label,
+            time_order=int(item.get("time_order") or index),
+            description=description,
+            participant_node_ids=participant_ids,
+        )
+        event.source_refs = [source.id]
+        events.append(event)
+
+    return {"nodes": nodes, "relationships": relationships, "lore": lore, "events": events}
+
+
+def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
+    api_base = config.api_base.rstrip("/")
+    url = f"{api_base}/chat/completions"
+    prompt = (
+        "你是小说资料结构化抽取器。请只返回 JSON，不要解释。"
+        "JSON 字段：nodes, relationships, lore, timeline_events。"
+        "nodes: [{name,type,summary,confidence}]，只保留可描述的重要实体。"
+        "relationships: [{source,target,type,summary,confidence}]，summary 必须是总结，不要照抄原文。"
+        "lore: [{type,title,content,confidence}]。"
+        "timeline_events: [{title,time_label,time_order,description}]。"
+    )
+    body = {
+        "model": config.model,
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": f"资料标题：{source.title}\n资料类型：{source.type}\n资料内容：\n{source.content}"},
+        ],
+        "temperature": 0.2,
+        "response_format": {"type": "json_object"},
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {config.api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=90) as response:
+        response_data = json.loads(response.read().decode("utf-8"))
+    content = response_data["choices"][0]["message"]["content"]
+    parsed = json.loads(content)
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM 返回内容不是 JSON 对象")
+    return parsed
 def extract_nodes_from_source(project_id: str, source: Source, existing_names: Set[str]) -> List[Node]:
     candidates: Dict[str, str] = {}
     for name, description in NAME_PATTERN.findall(source.content):
@@ -253,4 +385,7 @@ def is_valid_name(name: str) -> bool:
     if re.search(r"[的是了和与及在为有被把到中上下一二三四五六七八九十]$", name) and len(name) > 4:
         return False
     return True
+
+
+
 

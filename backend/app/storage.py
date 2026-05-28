@@ -126,6 +126,20 @@ class SQLiteStore:
     def list_sources(self, project_id: str) -> List[Source]:
         return self._list_by_project(Source, "sources", project_id, "created_at ASC")
 
+    def get_source(self, source_id: str) -> Optional[Source]:
+        return self._get_one(Source, "sources", source_id)
+
+    def delete_source(self, project_id: str, source_id: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM sources WHERE id = ? AND project_id = ?",
+                (source_id, project_id),
+            ).fetchone()
+            if not row:
+                return False
+            connection.execute("DELETE FROM sources WHERE id = ? AND project_id = ?", (source_id, project_id))
+        return True
+
 
     def mark_source_extracted(self, source: Source) -> Source:
         self.save_source(source)
@@ -227,5 +241,6 @@ def parse_many(model: Type[T], rows: Sequence[sqlite3.Row]) -> List[T]:
     return [parse_one(model, row["data"]) for row in rows]
 
 store = SQLiteStore()
+
 
 

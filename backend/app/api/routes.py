@@ -12,6 +12,7 @@ from app.schemas import (
     CreateRelationshipRequest,
     CreateSourceRequest,
     CreateTimelineEventRequest,
+    ExtractProjectRequest,
     ExtractionResult,
     GraphResponse,
     LoreEntry,
@@ -24,8 +25,8 @@ from app.schemas import (
 )
 from app.storage import store
 
-
 router = APIRouter()
+SUPPORTED_SOURCE_SUFFIXES = {".txt", ".md", ".markdown"}
 
 
 def ensure_project(project_id: str) -> Project:
@@ -63,9 +64,6 @@ def add_source(project_id: str, payload: CreateSourceRequest) -> Source:
     return store.save_source(source)
 
 
-
-SUPPORTED_SOURCE_SUFFIXES = {".txt", ".md", ".markdown"}
-
 def decode_source_file(content: bytes) -> str:
     for encoding in ("utf-8-sig", "utf-8", "gb18030"):
         try:
@@ -73,6 +71,7 @@ def decode_source_file(content: bytes) -> str:
         except UnicodeDecodeError:
             continue
     raise HTTPException(status_code=400, detail="文件编码不支持，请使用 UTF-8 或 GB18030 文本文件")
+
 
 @router.post("/projects/{project_id}/sources/upload")
 async def upload_sources(
@@ -95,16 +94,37 @@ async def upload_sources(
         created_sources.append(store.save_source(source))
     return created_sources
 
+
 @router.get("/projects/{project_id}/sources")
 def list_sources(project_id: str) -> List[Source]:
     ensure_project(project_id)
     return store.list_sources(project_id)
 
 
-@router.post("/projects/{project_id}/extract")
-def extract_project(project_id: str) -> ExtractionResult:
+@router.delete("/projects/{project_id}/sources/{source_id}")
+def delete_source(project_id: str, source_id: str) -> dict:
     ensure_project(project_id)
-    created_nodes, created_relationships, created_lore_entries, created_timeline_events, processed_sources, skipped_sources = extract_world(project_id, store)
+    deleted = store.delete_source(project_id, source_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="来源资料不存在")
+    return {"deleted": True, "source_id": source_id}
+
+
+@router.post("/projects/{project_id}/extract")
+def extract_project(project_id: str, payload: ExtractProjectRequest = ExtractProjectRequest()) -> ExtractionResult:
+    ensure_project(project_id)
+    if payload.mode == "llm" and not payload.llm:
+        raise HTTPException(status_code=400, detail="LLM 抽取需要填写 API 配置")
+    try:
+        created_nodes, created_relationships, created_lore_entries, created_timeline_events, processed_sources, skipped_sources = extract_world(
+            project_id,
+            store,
+            source_ids=payload.source_ids,
+            mode=payload.mode,
+            llm_config=payload.llm,
+        )
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error))
     return ExtractionResult(
         project_id=project_id,
         created_nodes=created_nodes,
@@ -143,7 +163,6 @@ def add_node(project_id: str, payload: CreateNodeRequest) -> Node:
     return store.save_node(node)
 
 
-
 @router.delete("/projects/{project_id}/nodes/{node_id}")
 def delete_node(project_id: str, node_id: str) -> dict:
     ensure_project(project_id)
@@ -151,6 +170,7 @@ def delete_node(project_id: str, node_id: str) -> dict:
     if not deleted:
         raise HTTPException(status_code=404, detail="节点不存在")
     return {"deleted": True, "node_id": node_id}
+
 
 @router.post("/projects/{project_id}/relationships")
 def add_relationship(project_id: str, payload: CreateRelationshipRequest) -> Relationship:
@@ -210,5 +230,3 @@ def create_prediction(project_id: str) -> PredictionReport:
             "哪些世界观规则会限制剧情走向？",
         ],
     )
-
-
