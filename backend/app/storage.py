@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import sqlite3
@@ -7,7 +7,7 @@ from typing import List, Optional, Sequence, Type, TypeVar
 
 from pydantic import BaseModel
 
-from app.schemas import LoreEntry, Node, Project, Relationship, Source, TimelineEvent
+from app.schemas import LoreEntry, Node, Project, Relationship, Source, TimelineEvent, TimelineFlowLayout
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -75,6 +75,12 @@ class SQLiteStore:
                     data TEXT NOT NULL,
                     FOREIGN KEY(project_id) REFERENCES projects(id)
                 );
+
+                CREATE TABLE IF NOT EXISTS timeline_flow_layouts (
+                    project_id TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    FOREIGN KEY(project_id) REFERENCES projects(id)
+                );
                 """
             )
 
@@ -82,6 +88,7 @@ class SQLiteStore:
         with self.connect() as connection:
             connection.executescript(
                 """
+                DELETE FROM timeline_flow_layouts;
                 DELETE FROM timeline_events;
                 DELETE FROM lore_entries;
                 DELETE FROM relationships;
@@ -310,7 +317,26 @@ class SQLiteStore:
 
     def list_timeline_events(self, project_id: str) -> List[TimelineEvent]:
         return self._list_by_project(TimelineEvent, "timeline_events", project_id, "time_order ASC")
+    def get_timeline_flow_layout(self, project_id: str) -> TimelineFlowLayout:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT data FROM timeline_flow_layouts WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        if not row:
+            return TimelineFlowLayout(project_id=project_id)
+        return parse_one(TimelineFlowLayout, row["data"])
 
+    def save_timeline_flow_layout(self, layout: TimelineFlowLayout) -> TimelineFlowLayout:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO timeline_flow_layouts (project_id, data) VALUES (?, ?)
+                ON CONFLICT(project_id) DO UPDATE SET data = excluded.data
+                """,
+                (layout.project_id, serialize(layout)),
+            )
+        return layout
     def _get_one(self, model: Type[T], table: str, item_id: str) -> Optional[T]:
         with self.connect() as connection:
             row = connection.execute(f"SELECT data FROM {table} WHERE id = ?", (item_id,)).fetchone()

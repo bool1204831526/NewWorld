@@ -1,12 +1,11 @@
 ﻿import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { BookOpen, GitBranch, Layers3, Network, Play, Plus, ScrollText, Sparkles } from "lucide-react";
-import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineEvent, api } from "./api";
+import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineEvent, TimelineFlowLayout as ApiTimelineFlowLayout, api } from "./api";
 import "./styles.css";
 
 const emptyGraph: GraphResponse = { nodes: [], relationships: [] };
 
 const LLM_PROFILE_STORAGE_KEY = "newworld.llmProfiles";
-const TIMELINE_FLOW_STORAGE_KEY = "newworld.timelineFlow";
 
 interface TimelineFlowEdge {
   id: string;
@@ -19,17 +18,18 @@ interface TimelineFlowLayout {
   edges: TimelineFlowEdge[];
 }
 
-function loadTimelineFlowLayouts(): Record<string, TimelineFlowLayout> {
-  try {
-    const raw = window.localStorage.getItem(TIMELINE_FLOW_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : {};
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-    return parsed as Record<string, TimelineFlowLayout>;
-  } catch {
-    return {};
-  }
+function normalizeTimelineFlowLayout(layout: ApiTimelineFlowLayout | null | undefined): TimelineFlowLayout {
+  const positions: Record<string, { x: number; y: number }> = {};
+  layout?.positions.forEach((position) => {
+    positions[position.event_id] = { x: position.x, y: position.y };
+  });
+  const edges = layout?.edges.map((edge) => ({
+    id: edge.id,
+    sourceEventId: edge.source_event_id,
+    targetEventId: edge.target_event_id,
+  })) ?? [];
+  return { positions, edges };
 }
-
 interface LLMProfile {
   id: string;
   label: string;
@@ -70,7 +70,7 @@ export default function App() {
   const [graph, setGraph] = useState<GraphResponse>(emptyGraph);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [editingEventId, setEditingEventId] = useState("");
-  const [timelineFlowLayouts, setTimelineFlowLayouts] = useState<Record<string, TimelineFlowLayout>>(() => loadTimelineFlowLayouts());
+  const [timelineFlowLayout, setTimelineFlowLayout] = useState<TimelineFlowLayout>({ positions: {}, edges: [] });
   const [timelineEdgeSourceId, setTimelineEdgeSourceId] = useState("");
   const [timelineEdgeTargetId, setTimelineEdgeTargetId] = useState("");
   const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
@@ -120,8 +120,7 @@ export default function App() {
     );
   }, [relationshipLabels, selectedNode]);
   const timelineFlow = useMemo(() => {
-    const projectKey = activeProjectId || "default";
-    const saved = timelineFlowLayouts[projectKey] ?? { positions: {}, edges: [] };
+    const saved = timelineFlowLayout;
     const positions: Record<string, { x: number; y: number }> = {};
     events.forEach((event, index) => {
       positions[event.id] = saved.positions[event.id] ?? { x: 320 + (index % 2) * 180, y: 70 + index * 180 };
@@ -141,19 +140,35 @@ export default function App() {
       return true;
     });
     return { positions, edges };
-  }, [activeProjectId, events, timelineFlowLayouts]);
+  }, [events, timelineFlowLayout]);
 
   const timelineFlowEventById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
 
-  useEffect(() => {
-    window.localStorage.setItem(TIMELINE_FLOW_STORAGE_KEY, JSON.stringify(timelineFlowLayouts));
-  }, [timelineFlowLayouts]);
+
+  async function saveTimelineFlowLayout(nextLayout: TimelineFlowLayout) {
+    const projectId = requireProject();
+    setTimelineFlowLayout(nextLayout);
+    const payload: ApiTimelineFlowLayout = {
+      project_id: projectId,
+      positions: Object.entries(nextLayout.positions).map(([event_id, position]) => ({
+        event_id,
+        x: position.x,
+        y: position.y,
+      })),
+      edges: nextLayout.edges.map((edge) => ({
+        id: edge.id,
+        source_event_id: edge.sourceEventId,
+        target_event_id: edge.targetEventId,
+      })),
+    };
+    const saved = await api.saveTimelineFlow(projectId, payload);
+    setTimelineFlowLayout(normalizeTimelineFlowLayout(saved));
+  }
 
   function updateTimelineFlowLayout(updater: (layout: TimelineFlowLayout) => TimelineFlowLayout) {
-    const projectKey = activeProjectId || "default";
-    setTimelineFlowLayouts((current) => {
-      const currentLayout = current[projectKey] ?? { positions: {}, edges: [] };
-      return { ...current, [projectKey]: updater(currentLayout) };
+    const nextLayout = updater(timelineFlowLayout);
+    saveTimelineFlowLayout(nextLayout).catch((error) => {
+      setStatus(error instanceof Error ? error.message : "流程图保存失败");
     });
   }
 
@@ -184,14 +199,13 @@ export default function App() {
   }
 
   function handleResetTimelineFlow() {
-    const projectKey = activeProjectId || "default";
-    setTimelineFlowLayouts((current) => {
-      const next = { ...current };
-      delete next[projectKey];
-      return next;
-    });
-    setTimelineEdgeSourceId("");
-    setTimelineEdgeTargetId("");
+    saveTimelineFlowLayout({ positions: {}, edges: [] })
+      .then(() => {
+        setTimelineEdgeSourceId("");
+        setTimelineEdgeTargetId("");
+        setStatus("流程图布局已重置");
+      })
+      .catch((error) => setStatus(error instanceof Error ? error.message : "流程图保存失败"));
   }
 
   const graphLayout = useMemo(() => {
@@ -252,16 +266,18 @@ export default function App() {
   }, [graph.nodes, graph.relationships, relationshipLabels, selectedNode, selectedRelationships]);
 
   async function refreshProject(projectId: string) {
-    const [nextSources, nextGraph, nextEvents, nextLore] = await Promise.all([
+    const [nextSources, nextGraph, nextEvents, nextLore, nextTimelineFlow] = await Promise.all([
       api.listSources(projectId),
       api.getGraph(projectId),
       api.getTimeline(projectId),
       api.getLore(projectId),
+      api.getTimelineFlow(projectId),
     ]);
     setSources(nextSources);
     setGraph(nextGraph);
     setEvents(nextEvents);
     setLoreEntries(nextLore);
+    setTimelineFlowLayout(normalizeTimelineFlowLayout(nextTimelineFlow));
   }
 
   async function loadProjects() {
@@ -338,6 +354,7 @@ export default function App() {
       setSources([]);
       setGraph(emptyGraph);
       setEvents([]);
+      setTimelineFlowLayout({ positions: {}, edges: [] });
       setLoreEntries([]);
       setReport(null);
       setSelectedSourceIds([]);

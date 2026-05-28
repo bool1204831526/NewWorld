@@ -72,6 +72,24 @@ export interface TimelineEvent {
   participant_node_ids: string[];
 }
 
+export interface TimelineFlowPosition {
+  event_id: string;
+  x: number;
+  y: number;
+}
+
+export interface TimelineFlowEdge {
+  id: string;
+  source_event_id: string;
+  target_event_id: string;
+}
+
+export interface TimelineFlowLayout {
+  project_id: string;
+  positions: TimelineFlowPosition[];
+  edges: TimelineFlowEdge[];
+}
+
 export interface GraphResponse {
   nodes: NodeItem[];
   relationships: Relationship[];
@@ -142,6 +160,9 @@ export const api = {
     payload: { source_node_id: string; target_node_id: string; type: string; summary: string },
   ) => request<Relationship>(`/projects/${projectId}/relationships`, { method: "POST", body: JSON.stringify(payload) }),
   getTimeline: (projectId: string) => request<TimelineEvent[]>(`/projects/${projectId}/timeline`),
+  getTimelineFlow: (projectId: string) => request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`),
+  saveTimelineFlow: (projectId: string, payload: TimelineFlowLayout) =>
+    request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`, { method: "PUT", body: JSON.stringify(payload) }),
   addTimelineEvent: (
     projectId: string,
     payload: { title: string; time_label: string; time_order: number; description: string; participant_node_ids: string[] },

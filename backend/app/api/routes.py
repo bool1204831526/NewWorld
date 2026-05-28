@@ -23,6 +23,9 @@ from app.schemas import (
     Relationship,
     Source,
     TimelineEvent,
+    TimelineFlowEdge,
+    TimelineFlowLayout,
+    TimelineFlowPosition,
 )
 from app.storage import store
 
@@ -164,7 +167,6 @@ def add_node(project_id: str, payload: CreateNodeRequest) -> Node:
     return store.save_node(node)
 
 
-
 @router.post("/projects/{project_id}/nodes/{target_node_id}/merge")
 def merge_node(project_id: str, target_node_id: str, payload: MergeNodeRequest) -> Node:
     ensure_project(project_id)
@@ -174,6 +176,7 @@ def merge_node(project_id: str, target_node_id: str, payload: MergeNodeRequest) 
     if not merged:
         raise HTTPException(status_code=404, detail="待合并节点不存在")
     return merged
+
 
 @router.delete("/projects/{project_id}/nodes/{node_id}")
 def delete_node(project_id: str, node_id: str) -> dict:
@@ -232,6 +235,37 @@ def update_timeline_event(project_id: str, event_id: str, payload: CreateTimelin
     existing.description = payload.description
     existing.participant_node_ids = payload.participant_node_ids
     return store.update_timeline_event(existing)
+
+
+@router.get("/projects/{project_id}/timeline-flow")
+def get_timeline_flow(project_id: str) -> TimelineFlowLayout:
+    ensure_project(project_id)
+    return store.get_timeline_flow_layout(project_id)
+
+
+@router.put("/projects/{project_id}/timeline-flow")
+def save_timeline_flow(project_id: str, payload: TimelineFlowLayout) -> TimelineFlowLayout:
+    ensure_project(project_id)
+    event_ids = {event.id for event in store.list_timeline_events(project_id)}
+    positions = [
+        TimelineFlowPosition(event_id=item.event_id, x=max(0, item.x), y=max(0, item.y))
+        for item in payload.positions
+        if item.event_id in event_ids
+    ]
+    edge_keys = set()
+    edges: List[TimelineFlowEdge] = []
+    for edge in payload.edges:
+        if edge.source_event_id == edge.target_event_id:
+            continue
+        if edge.source_event_id not in event_ids or edge.target_event_id not in event_ids:
+            continue
+        key = (edge.source_event_id, edge.target_event_id)
+        if key in edge_keys:
+            continue
+        edge_keys.add(key)
+        edges.append(edge)
+    layout = TimelineFlowLayout(project_id=project_id, positions=positions, edges=edges)
+    return store.save_timeline_flow_layout(layout)
 
 
 @router.post("/projects/{project_id}/predictions")

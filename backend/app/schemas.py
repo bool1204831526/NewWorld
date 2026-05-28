@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from datetime import datetime
 from typing import List, Optional
@@ -185,6 +185,22 @@ class TimelineEvent(BaseModel):
             participant_node_ids=participant_node_ids,
         )
 
+class TimelineFlowPosition(BaseModel):
+    event_id: str
+    x: float
+    y: float
+
+
+class TimelineFlowEdge(BaseModel):
+    id: str
+    source_event_id: str
+    target_event_id: str
+
+
+class TimelineFlowLayout(BaseModel):
+    project_id: str
+    positions: List[TimelineFlowPosition] = []
+    edges: List[TimelineFlowEdge] = []
 
 class LLMExtractionConfig(BaseModel):
     api_base: str = "https://api.openai.com/v1"

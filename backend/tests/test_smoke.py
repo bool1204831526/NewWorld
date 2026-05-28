@@ -326,3 +326,39 @@ def test_update_timeline_event() -> None:
     assert timeline[0]["title"] == "新事件"
     assert timeline[0]["time_label"] == "第二章"
 
+
+
+def test_timeline_flow_layout_persists() -> None:
+    project_response = client.post("/api/projects", json={"name": "流程图保存失败"})
+    project = project_response.json()
+    first = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "出发", "time_label": "第一章", "time_order": 1, "description": "离开故乡。", "participant_node_ids": []},
+    ).json()
+    second = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "分歧", "time_label": "第二章", "time_order": 2, "description": "路线分开。", "participant_node_ids": []},
+    ).json()
+
+    payload = {
+        "project_id": "wrong_project_id",
+        "positions": [
+            {"event_id": first["id"], "x": 240, "y": 80},
+            {"event_id": second["id"], "x": 520, "y": 260},
+            {"event_id": "missing", "x": 1, "y": 1},
+        ],
+        "edges": [
+            {"id": "edge_branch", "source_event_id": first["id"], "target_event_id": second["id"]},
+            {"id": "edge_invalid", "source_event_id": first["id"], "target_event_id": "missing"},
+        ],
+    }
+    response = client.put(f"/api/projects/{project['id']}/timeline-flow", json=payload)
+    assert response.status_code == 200
+    saved = response.json()
+    assert saved["project_id"] == project["id"]
+    assert len(saved["positions"]) == 2
+    assert saved["edges"] == [{"id": "edge_branch", "source_event_id": first["id"], "target_event_id": second["id"]}]
+
+    loaded = client.get(f"/api/projects/{project['id']}/timeline-flow")
+    assert loaded.status_code == 200
+    assert loaded.json() == saved
