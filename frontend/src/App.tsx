@@ -39,23 +39,46 @@ export default function App() {
     const height = 520;
     const centerX = width / 2;
     const centerY = height / 2;
-    const radiusX = Math.max(190, Math.min(340, 96 + graph.nodes.length * 18));
-    const radiusY = Math.max(140, Math.min(210, 82 + graph.nodes.length * 10));
+    const focusNode = selectedNode;
+    const focusedRelationshipNodeIds = new Set<string>();
+    if (focusNode) {
+      selectedRelationships.forEach((relationship) => {
+        focusedRelationshipNodeIds.add(relationship.source_node_id);
+        focusedRelationshipNodeIds.add(relationship.target_node_id);
+      });
+      focusedRelationshipNodeIds.delete(focusNode.id);
+    }
+    const relatedIds = Array.from(focusedRelationshipNodeIds);
+    const outerIds = graph.nodes.map((node) => node.id).filter((id) => id !== focusNode?.id && !focusedRelationshipNodeIds.has(id));
+    const relatedOrder = new Map(relatedIds.map((id, index) => [id, index]));
+    const outerOrder = new Map(outerIds.map((id, index) => [id, index]));
     const degree = new Map(graph.nodes.map((node) => [node.id, 0]));
     graph.relationships.forEach((relationship) => {
       degree.set(relationship.source_node_id, (degree.get(relationship.source_node_id) ?? 0) + 1);
       degree.set(relationship.target_node_id, (degree.get(relationship.target_node_id) ?? 0) + 1);
     });
-    const nodes = graph.nodes.map((node, index) => {
-      const angle = graph.nodes.length <= 1 ? 0 : (Math.PI * 2 * index) / graph.nodes.length - Math.PI / 2;
-      const connected = degree.get(node.id) ?? 0;
-      const radialBias = connected > 1 ? 0.86 : 1;
+    const placeOnRing = (index: number, total: number, radiusX: number, radiusY: number, offset = -Math.PI / 2) => {
+      const angle = total <= 1 ? offset : (Math.PI * 2 * index) / total + offset;
       return {
-        ...node,
-        connected,
-        x: centerX + Math.cos(angle) * radiusX * radialBias,
-        y: centerY + Math.sin(angle) * radiusY * radialBias,
+        x: centerX + Math.cos(angle) * radiusX,
+        y: centerY + Math.sin(angle) * radiusY,
       };
+    };
+    const nodes = graph.nodes.map((node, index) => {
+      const connected = degree.get(node.id) ?? 0;
+      if (focusNode && node.id === focusNode.id) {
+        return { ...node, connected, focusLevel: "selected", x: centerX, y: centerY };
+      }
+      if (focusNode && focusedRelationshipNodeIds.has(node.id)) {
+        const position = placeOnRing(relatedOrder.get(node.id) ?? 0, relatedIds.length, 245, 155);
+        return { ...node, connected, focusLevel: "related", ...position };
+      }
+      if (focusNode) {
+        const position = placeOnRing(outerOrder.get(node.id) ?? 0, Math.max(outerIds.length, 1), 370, 225, -Math.PI / 3);
+        return { ...node, connected, focusLevel: "outer", ...position };
+      }
+      const position = placeOnRing(index, graph.nodes.length, Math.max(190, Math.min(340, 96 + graph.nodes.length * 18)), Math.max(140, Math.min(210, 82 + graph.nodes.length * 10)));
+      return { ...node, connected, focusLevel: "normal", ...position };
     });
     const byId = new Map(nodes.map((node) => [node.id, node]));
     const edges = relationshipLabels
@@ -66,7 +89,7 @@ export default function App() {
       }))
       .filter((edge) => edge.source && edge.target);
     return { width, height, nodes, edges };
-  }, [graph.nodes, graph.relationships, relationshipLabels]);
+  }, [graph.nodes, graph.relationships, relationshipLabels, selectedNode, selectedRelationships]);
 
   async function refreshProject(projectId: string) {
     const [nextSources, nextGraph, nextEvents, nextLore] = await Promise.all([
@@ -283,7 +306,7 @@ export default function App() {
             <input accept=".txt,.md,.markdown,text/plain,text/markdown" multiple name="sourceFiles" type="file" />
             <button disabled={busy || !activeProjectId} type="submit">导入文件</button>
           </form>
-                    <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取</p>
+          <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取</p>
           <ul className="source-list">
             {sources.length === 0 ? <li>暂无导入资料</li> : sources.map((source) => (
               <li key={source.id}>
@@ -365,10 +388,10 @@ export default function App() {
                     })}
                     {graphLayout.nodes.map((node) => {
                       const selected = selectedNode?.id === node.id;
-                      const related = selectedNode && selectedRelationships.some((relationship) => relationship.source_node_id === node.id || relationship.target_node_id === node.id);
+                      const related = node.focusLevel === "related";
                       return (
-                        <g className={selected ? "graph-node selected" : related ? "graph-node related" : "graph-node"} key={node.id} onClick={() => setSelectedNodeId(node.id)} role="button" tabIndex={0}>
-                          <circle cx={node.x} cy={node.y} r={(selected || related) ? Math.min(46, 30 + node.connected * 4) : Math.min(32, 19 + node.connected * 3)} />
+                        <g className={selected ? "graph-node selected" : related ? "graph-node related" : node.focusLevel === "outer" ? "graph-node outer" : "graph-node"} key={node.id} onClick={() => setSelectedNodeId(node.id)} role="button" tabIndex={0}>
+                          <circle cx={node.x} cy={node.y} r={selected ? 48 : related ? Math.min(42, 29 + node.connected * 3) : Math.min(28, 18 + node.connected * 2)} />
                           <text x={node.x} y={node.y + 4}>{node.name}</text>
                           <text className="node-type" x={node.x} y={node.y + 24}>{node.type}</text>
                         </g>
@@ -419,4 +442,5 @@ export default function App() {
     </main>
   );
 }
+
 

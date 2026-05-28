@@ -207,9 +207,11 @@ nav .active {
 .edge line {
   stroke: #aab4c0;
   stroke-width: 2;
+  transition: x1 420ms ease, x2 420ms ease, y1 420ms ease, y2 420ms ease, stroke 220ms ease, stroke-width 220ms ease, opacity 220ms ease;
 }
 
 .edge text {
+  transition: x 420ms ease, y 420ms ease, opacity 220ms ease, fill 220ms ease;
   paint-order: stroke;
   stroke: #fff;
   stroke-width: 5px;
@@ -237,9 +239,11 @@ nav .active {
   stroke: var(--blue);
   stroke-width: 3;
   filter: drop-shadow(0 8px 16px rgba(36, 44, 55, 0.12));
+  transition: cx 420ms ease, cy 420ms ease, r 320ms ease, fill 220ms ease, stroke 220ms ease, opacity 220ms ease;
 }
 
 .graph-node text {
+  transition: x 420ms ease, y 420ms ease, opacity 220ms ease, fill 220ms ease, font-size 220ms ease;
   fill: var(--ink);
   font-size: 14px;
   font-weight: 800;
@@ -261,6 +265,18 @@ nav .active {
   fill: #eef6ff;
   stroke: var(--red);
   stroke-width: 4;
+}
+.graph-node.outer circle,
+.graph-node.outer text {
+  opacity: 0.42;
+}
+
+.graph-node.selected text {
+  font-size: 17px;
+}
+
+.graph-node.related text {
+  font-size: 15px;
 }
 
 .node-inspector {
@@ -481,4 +497,5 @@ select {
   color: var(--muted);
   font-size: 12px;
 }
+
 
