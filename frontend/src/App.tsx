@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from "react";
+﻿import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { BookOpen, GitBranch, Layers3, Network, Play, Plus, ScrollText, Sparkles } from "lucide-react";
 import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineEvent, api } from "./api";
 import "./styles.css";
@@ -6,6 +6,29 @@ import "./styles.css";
 const emptyGraph: GraphResponse = { nodes: [], relationships: [] };
 
 const LLM_PROFILE_STORAGE_KEY = "newworld.llmProfiles";
+const TIMELINE_FLOW_STORAGE_KEY = "newworld.timelineFlow";
+
+interface TimelineFlowEdge {
+  id: string;
+  sourceEventId: string;
+  targetEventId: string;
+}
+
+interface TimelineFlowLayout {
+  positions: Record<string, { x: number; y: number }>;
+  edges: TimelineFlowEdge[];
+}
+
+function loadTimelineFlowLayouts(): Record<string, TimelineFlowLayout> {
+  try {
+    const raw = window.localStorage.getItem(TIMELINE_FLOW_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : {};
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, TimelineFlowLayout>;
+  } catch {
+    return {};
+  }
+}
 
 interface LLMProfile {
   id: string;
@@ -47,6 +70,9 @@ export default function App() {
   const [graph, setGraph] = useState<GraphResponse>(emptyGraph);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [editingEventId, setEditingEventId] = useState("");
+  const [timelineFlowLayouts, setTimelineFlowLayouts] = useState<Record<string, TimelineFlowLayout>>(() => loadTimelineFlowLayouts());
+  const [timelineEdgeSourceId, setTimelineEdgeSourceId] = useState("");
+  const [timelineEdgeTargetId, setTimelineEdgeTargetId] = useState("");
   const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
@@ -93,6 +119,81 @@ export default function App() {
       relationship.source_node_id === selectedNode.id || relationship.target_node_id === selectedNode.id,
     );
   }, [relationshipLabels, selectedNode]);
+  const timelineFlow = useMemo(() => {
+    const projectKey = activeProjectId || "default";
+    const saved = timelineFlowLayouts[projectKey] ?? { positions: {}, edges: [] };
+    const positions: Record<string, { x: number; y: number }> = {};
+    events.forEach((event, index) => {
+      positions[event.id] = saved.positions[event.id] ?? { x: 320 + (index % 2) * 180, y: 70 + index * 180 };
+    });
+    const eventIds = new Set(events.map((event) => event.id));
+    const defaultEdges: TimelineFlowEdge[] = events.slice(0, -1).map((event, index) => ({
+      id: `default_${event.id}_${events[index + 1].id}`,
+      sourceEventId: event.id,
+      targetEventId: events[index + 1].id,
+    }));
+    const customEdges = saved.edges.filter((edge) => eventIds.has(edge.sourceEventId) && eventIds.has(edge.targetEventId));
+    const edgeKeys = new Set<string>();
+    const edges = [...defaultEdges, ...customEdges].filter((edge) => {
+      const key = `${edge.sourceEventId}:${edge.targetEventId}`;
+      if (edge.sourceEventId === edge.targetEventId || edgeKeys.has(key)) return false;
+      edgeKeys.add(key);
+      return true;
+    });
+    return { positions, edges };
+  }, [activeProjectId, events, timelineFlowLayouts]);
+
+  const timelineFlowEventById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
+
+  useEffect(() => {
+    window.localStorage.setItem(TIMELINE_FLOW_STORAGE_KEY, JSON.stringify(timelineFlowLayouts));
+  }, [timelineFlowLayouts]);
+
+  function updateTimelineFlowLayout(updater: (layout: TimelineFlowLayout) => TimelineFlowLayout) {
+    const projectKey = activeProjectId || "default";
+    setTimelineFlowLayouts((current) => {
+      const currentLayout = current[projectKey] ?? { positions: {}, edges: [] };
+      return { ...current, [projectKey]: updater(currentLayout) };
+    });
+  }
+
+  function moveTimelineEvent(eventId: string, x: number, y: number) {
+    updateTimelineFlowLayout((layout) => ({
+      ...layout,
+      positions: { ...layout.positions, [eventId]: { x: Math.max(30, x), y: Math.max(30, y) } },
+    }));
+  }
+
+  function handleTimelineNodeDrag(eventId: string, event: DragEvent<HTMLButtonElement>) {
+    const canvas = event.currentTarget.closest(".timeline-flow-canvas");
+    if (!(canvas instanceof HTMLElement)) return;
+    const bounds = canvas.getBoundingClientRect();
+    moveTimelineEvent(eventId, event.clientX - bounds.left - 120, event.clientY - bounds.top - 60);
+  }
+
+  function handleAddTimelineEdge() {
+    if (!timelineEdgeSourceId || !timelineEdgeTargetId || timelineEdgeSourceId === timelineEdgeTargetId) return;
+    updateTimelineFlowLayout((layout) => {
+      const exists = layout.edges.some((edge) => edge.sourceEventId === timelineEdgeSourceId && edge.targetEventId === timelineEdgeTargetId);
+      if (exists) return layout;
+      return {
+        ...layout,
+        edges: [...layout.edges, { id: `edge_${Date.now()}`, sourceEventId: timelineEdgeSourceId, targetEventId: timelineEdgeTargetId }],
+      };
+    });
+  }
+
+  function handleResetTimelineFlow() {
+    const projectKey = activeProjectId || "default";
+    setTimelineFlowLayouts((current) => {
+      const next = { ...current };
+      delete next[projectKey];
+      return next;
+    });
+    setTimelineEdgeSourceId("");
+    setTimelineEdgeTargetId("");
+  }
+
   const graphLayout = useMemo(() => {
     const width = 900;
     const height = 520;
@@ -718,18 +819,61 @@ export default function App() {
           ) : null}
           {activeView === "timeline" ? (
           <section className="panel timeline-panel">
-            <div className="section-head"><h2>时间发展线</h2><span>{events.length} 个事件 · 抽取后自动增量更新</span></div>
-            <div className="timeline-flow">
-              {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : events.map((event, index) => (
-                <div className="timeline-flow-step" key={event.id}>
-                  <button className={editingEventId === event.id ? "timeline-card active" : "timeline-card"} onClick={() => setEditingEventId(event.id)} type="button">
-                    <time>{event.time_label}</time>
-                    <strong>{event.title}</strong>
-                    <p>{event.description || "暂无描述"}</p>
-                  </button>
-                  {index < events.length - 1 ? <span className="timeline-arrow">→</span> : null}
-                </div>
-              ))}
+            <div className="section-head"><h2>时间发展线</h2><span>{events.length} 个事件 · 竖向流程图</span></div>
+            <div className="timeline-flow-tools">
+              <select value={timelineEdgeSourceId} onChange={(event) => setTimelineEdgeSourceId(event.target.value)}>
+                <option value="">分支起点</option>
+                {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
+              </select>
+              <select value={timelineEdgeTargetId} onChange={(event) => setTimelineEdgeTargetId(event.target.value)}>
+                <option value="">分支终点</option>
+                {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
+              </select>
+              <button disabled={!timelineEdgeSourceId || !timelineEdgeTargetId || timelineEdgeSourceId === timelineEdgeTargetId} onClick={handleAddTimelineEdge} type="button">添加分支线</button>
+              <button onClick={handleResetTimelineFlow} type="button">重置布局</button>
+            </div>
+            <div className="timeline-flow-canvas">
+              {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : (
+                <>
+                  <svg className="timeline-flow-lines" width="980" height={Math.max(520, events.length * 190 + 120)}>
+                    <defs>
+                      <marker id="timeline-arrow" markerHeight="10" markerWidth="10" orient="auto" refX="9" refY="5">
+                        <path d="M0,0 L10,5 L0,10 Z" />
+                      </marker>
+                    </defs>
+                    {timelineFlow.edges.map((edge) => {
+                      const source = timelineFlow.positions[edge.sourceEventId];
+                      const target = timelineFlow.positions[edge.targetEventId];
+                      const custom = !edge.id.startsWith("default_");
+                      if (!source || !target) return null;
+                      const x1 = source.x + 120;
+                      const y1 = source.y + 120;
+                      const x2 = target.x + 120;
+                      const y2 = target.y;
+                      const midY = (y1 + y2) / 2;
+                      return <path className={custom ? "timeline-flow-line custom" : "timeline-flow-line"} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} key={edge.id} markerEnd="url(#timeline-arrow)" />;
+                    })}
+                  </svg>
+                  {events.map((event) => {
+                    const position = timelineFlow.positions[event.id] ?? { x: 320, y: 80 };
+                    return (
+                      <button
+                        className={editingEventId === event.id ? "timeline-node active" : "timeline-node"}
+                        draggable
+                        key={event.id}
+                        onClick={() => setEditingEventId(event.id)}
+                        onDragEnd={(dragEvent) => handleTimelineNodeDrag(event.id, dragEvent)}
+                        style={{ left: position.x, top: position.y }}
+                        type="button"
+                      >
+                        <time>{event.time_label}</time>
+                        <strong>{event.title}</strong>
+                        <p>{event.description || "暂无描述"}</p>
+                      </button>
+                    );
+                  })}
+                </>
+              )}
             </div>
             {editingEvent ? (
               <form className="timeline-editor" onSubmit={handleUpdateTimelineEvent}>
