@@ -641,4 +641,14 @@ button.subtle {
   color: var(--muted);
   font-size: 11px;
 }
+.graph-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.graph-search-row button {
+  white-space: nowrap;
+}
 

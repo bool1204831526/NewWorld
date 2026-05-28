@@ -56,6 +56,9 @@ export default function App() {
   const [llmApiBase, setLlmApiBase] = useState("https://api.openai.com/v1");
   const [llmModel, setLlmModel] = useState("gpt-4o-mini");
   const [llmApiKey, setLlmApiKey] = useState("");
+  const [relationshipSourceQuery, setRelationshipSourceQuery] = useState("");
+  const [relationshipTargetQuery, setRelationshipTargetQuery] = useState("");
+  const [graphNodeQuery, setGraphNodeQuery] = useState("");
   const [llmProfileLabel, setLlmProfileLabel] = useState("");
   const [llmProfiles, setLlmProfiles] = useState<LLMProfile[]>(() => loadLLMProfiles());
 
@@ -69,7 +72,10 @@ export default function App() {
     }));
   }, [graph]);
 
+  const nodeSearchOptions = useMemo(() => graph.nodes.map((node) => `${node.name} · ${node.type}`), [graph.nodes]);
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0];
+  const relationshipSourceNode = findNodeBySearchValue(relationshipSourceQuery);
+  const relationshipTargetNode = findNodeBySearchValue(relationshipTargetQuery);
   const selectedRelationships = useMemo(() => {
     if (!selectedNode) return [];
     return relationshipLabels.filter((relationship) =>
@@ -182,6 +188,24 @@ export default function App() {
     }
   }
 
+  function findNodeBySearchValue(value: string) {
+    const query = value.trim();
+    if (!query) return undefined;
+    const normalized = query.split(" · ")[0].trim();
+    return graph.nodes.find((node) => node.id === query || node.name === normalized || node.name === query);
+  }
+
+  function focusNodeBySearchValue(value: string) {
+    const node = findNodeBySearchValue(value);
+    if (!node) {
+      setStatus("没有找到匹配的节点");
+      return;
+    }
+    setSelectedNodeId(node.id);
+    setGraphNodeQuery(`${node.name} · ${node.type}`);
+    setStatus(`已定位节点：${node.name}`);
+  }
+
   function requireProject() {
     if (!activeProjectId) throw new Error("请先创建项目");
     return activeProjectId;
@@ -249,8 +273,10 @@ export default function App() {
     if (!name) return;
     runAction(async () => {
       const projectId = requireProject();
-      await api.addNode(projectId, { name, type, summary });
+      const node = await api.addNode(projectId, { name, type, summary });
       await refreshProject(projectId);
+      setSelectedNodeId(node.id);
+      setGraphNodeQuery(`${node.name} · ${node.type}`);
       formElement.reset();
     }, "节点已添加");
   }
@@ -259,8 +285,10 @@ export default function App() {
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const source_node_id = String(form.get("sourceNodeId") ?? "");
-    const target_node_id = String(form.get("targetNodeId") ?? "");
+    const sourceNode = findNodeBySearchValue(relationshipSourceQuery);
+    const targetNode = findNodeBySearchValue(relationshipTargetQuery);
+    const source_node_id = sourceNode?.id ?? "";
+    const target_node_id = targetNode?.id ?? "";
     const type = String(form.get("relationshipType") ?? "关联").trim();
     const summary = String(form.get("relationshipSummary") ?? "").trim();
     if (!source_node_id || !target_node_id || source_node_id === target_node_id) return;
@@ -268,6 +296,8 @@ export default function App() {
       const projectId = requireProject();
       await api.addRelationship(projectId, { source_node_id, target_node_id, type, summary });
       await refreshProject(projectId);
+      setRelationshipSourceQuery("");
+      setRelationshipTargetQuery("");
       formElement.reset();
     }, "关系已添加");
   }
@@ -511,11 +541,13 @@ export default function App() {
 
               <form className="stack" onSubmit={handleAddRelationship}>
                 <strong>关系</strong>
-                <select name="sourceNodeId"><option value="">起点节点</option>{graph.nodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select>
-                <select name="targetNodeId"><option value="">终点节点</option>{graph.nodes.map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}</select>
+                <input list="relationshipSourceNodes" onChange={(event) => setRelationshipSourceQuery(event.target.value)} placeholder="搜索起点节点" value={relationshipSourceQuery} />
+                <datalist id="relationshipSourceNodes">{nodeSearchOptions.map((option) => <option key={option} value={option} />)}</datalist>
+                <input list="relationshipTargetNodes" onChange={(event) => setRelationshipTargetQuery(event.target.value)} placeholder="搜索终点节点" value={relationshipTargetQuery} />
+                <datalist id="relationshipTargetNodes">{nodeSearchOptions.map((option) => <option key={option} value={option} />)}</datalist>
                 <input name="relationshipType" placeholder="关系，例如：追寻 / 敌对 / 隐瞒" />
                 <input name="relationshipSummary" placeholder="关系说明" />
-                <button disabled={busy || graph.nodes.length < 2} type="submit">添加关系</button>
+                <button disabled={busy || graph.nodes.length < 2 || !relationshipSourceNode || !relationshipTargetNode || relationshipSourceNode.id === relationshipTargetNode.id} type="submit">添加关系</button>
               </form>
 
               <form className="stack" onSubmit={handleAddEvent}>
@@ -532,6 +564,11 @@ export default function App() {
 
           <section className="panel graph-panel">
             <div className="section-head"><h2>重要节点地图</h2><span>{graph.nodes.length} 个节点 · {graph.relationships.length} 条关系</span></div>
+            <div className="graph-search-row">
+              <input list="graphNodeSearchOptions" onChange={(event) => setGraphNodeQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") focusNodeBySearchValue(graphNodeQuery); }} placeholder="搜索节点并定位" value={graphNodeQuery} />
+              <datalist id="graphNodeSearchOptions">{nodeSearchOptions.map((option) => <option key={option} value={option} />)}</datalist>
+              <button disabled={graph.nodes.length === 0} onClick={() => focusNodeBySearchValue(graphNodeQuery)} type="button">定位节点</button>
+            </div>
             <div className="graph-workbench">
               <div className="graph-canvas" aria-label="节点关系网络">
                 {graph.nodes.length === 0 ? <p className="empty">先创建项目，再添加节点。</p> : (
