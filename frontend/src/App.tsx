@@ -270,10 +270,11 @@ export default function App() {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const name = String(form.get("nodeName") ?? "").trim();
-    const type = String(form.get("nodeType") ?? "人物").trim();
+    const type = String(form.get("nodeType") ?? "").trim() || "人物";
     const summary = String(form.get("nodeSummary") ?? "").trim();
     if (!name) {
       setStatus("请填写节点名称");
+      window.alert("请填写节点名称");
       return;
     }
     if (!type) {
@@ -559,7 +560,7 @@ export default function App() {
               <form className="stack" onSubmit={handleAddNode}>
                 <strong>节点</strong>
                 <input name="nodeName" placeholder="名称，例如：林曜" />
-                <input name="nodeType" placeholder="类型，例如：人物 / 组织 / 物品" />
+                <input defaultValue="人物" name="nodeType" placeholder="类型，例如：人物 / 组织 / 物品" />
                 <textarea name="nodeSummary" placeholder="节点简介" />
                 <button disabled={busy || !activeProjectId} title={!activeProjectId ? "请先选择或创建项目" : ""} type="submit">添加节点</button>
               </form>
