@@ -5,6 +5,41 @@ import "./styles.css";
 
 const emptyGraph: GraphResponse = { nodes: [], relationships: [] };
 
+const LLM_PROFILE_STORAGE_KEY = "newworld.llmProfiles";
+
+interface LLMProfile {
+  id: string;
+  label: string;
+  apiBase: string;
+  model: string;
+  apiKey: string;
+  updatedAt: string;
+}
+
+function loadLLMProfiles(): LLMProfile[] {
+  try {
+    const raw = window.localStorage.getItem(LLM_PROFILE_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is LLMProfile =>
+      typeof item?.id === "string" &&
+      typeof item?.label === "string" &&
+      typeof item?.apiBase === "string" &&
+      typeof item?.model === "string" &&
+      typeof item?.apiKey === "string" &&
+      typeof item?.updatedAt === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function maskSecret(value: string) {
+  if (!value) return "未保存 Key";
+  if (value.length <= 8) return "已保存 Key";
+  return `${value.slice(0, 4)}...${value.slice(-4)}`;
+}
+
 export default function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState("");
@@ -21,6 +56,8 @@ export default function App() {
   const [llmApiBase, setLlmApiBase] = useState("https://api.openai.com/v1");
   const [llmModel, setLlmModel] = useState("gpt-4o-mini");
   const [llmApiKey, setLlmApiKey] = useState("");
+  const [llmProfileLabel, setLlmProfileLabel] = useState("");
+  const [llmProfiles, setLlmProfiles] = useState<LLMProfile[]>(() => loadLLMProfiles());
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const relationshipLabels = useMemo(() => {
@@ -124,6 +161,9 @@ export default function App() {
   useEffect(() => {
     setSelectedNodeId((current) => graph.nodes.some((node) => node.id === current) ? current : graph.nodes[0]?.id ?? "");
   }, [graph.nodes]);
+  useEffect(() => {
+    window.localStorage.setItem(LLM_PROFILE_STORAGE_KEY, JSON.stringify(llmProfiles));
+  }, [llmProfiles]);
 
   async function runAction(action: () => Promise<void>, doneMessage: string, alertOnError = false) {
     setBusy(true);
@@ -273,6 +313,49 @@ export default function App() {
       await refreshProject(projectId);
     }, "来源资料已删除");
   }
+
+  function handleSaveLLMProfile() {
+    const apiBase = llmApiBase.trim();
+    const model = llmModel.trim();
+    const apiKey = llmApiKey.trim();
+    if (!apiBase || !model || !apiKey) {
+      setStatus("请先填写完整的 LLM API Base、模型名和 API Key");
+      return;
+    }
+    const label = llmProfileLabel.trim() || `${model} · ${apiBase.replace(/^https?:\/\//, "")}`;
+    const now = new Date().toISOString();
+    setLlmProfiles((current) => {
+      const existing = current.find((profile) => profile.label === label || (profile.apiBase === apiBase && profile.model === model));
+      const profile: LLMProfile = {
+        id: existing?.id ?? `llm_${Date.now()}`,
+        label,
+        apiBase,
+        model,
+        apiKey,
+        updatedAt: now,
+      };
+      if (existing) {
+        return current.map((item) => item.id === existing.id ? profile : item);
+      }
+      return [profile, ...current].slice(0, 12);
+    });
+    setLlmProfileLabel("");
+    setStatus(`已保存 LLM 配置：${label}`);
+  }
+
+  function applyLLMProfile(profile: LLMProfile) {
+    setLlmApiBase(profile.apiBase);
+    setLlmModel(profile.model);
+    setLlmApiKey(profile.apiKey);
+    setLlmProfileLabel(profile.label);
+    setExtractMode("llm");
+    setStatus(`已套用 LLM 配置：${profile.label}`);
+  }
+
+  function deleteLLMProfile(profileId: string) {
+    setLlmProfiles((current) => current.filter((profile) => profile.id !== profileId));
+    setStatus("LLM 配置已删除");
+  }
   function handleExtractWorld() {
     runAction(async () => {
       const projectId = requireProject();
@@ -365,8 +448,23 @@ export default function App() {
             {extractMode === "llm" ? (
               <div className="llm-settings">
                 <input name="llmApiBase" onChange={(event) => setLlmApiBase(event.target.value)} placeholder="API Base，例如：https://api.openai.com/v1" value={llmApiBase} />
-                <input name="llmModel" onChange={(event) => setLlmModel(event.target.value)} placeholder="模型名，例如：gpt-4o-mini" value={llmModel} />
-                <input name="llmApiKey" onChange={(event) => setLlmApiKey(event.target.value)} placeholder="API Key，仅本次请求使用" type="password" value={llmApiKey} />
+                <input name="llmModel" onChange={(event) => setLlmModel(event.target.value)} placeholder="模型名，例如：deepseek-v4-pro" value={llmModel} />
+                <input name="llmApiKey" onChange={(event) => setLlmApiKey(event.target.value)} placeholder="API Key，可保存到本机浏览器" type="password" value={llmApiKey} />
+                <div className="llm-save-row">
+                  <input onChange={(event) => setLlmProfileLabel(event.target.value)} placeholder="配置名称，例如：DeepSeek Pro" value={llmProfileLabel} />
+                  <button disabled={busy || !llmApiBase.trim() || !llmModel.trim() || !llmApiKey.trim()} onClick={handleSaveLLMProfile} type="button">保存配置</button>
+                </div>
+                <ul className="llm-profile-list">
+                  {llmProfiles.length === 0 ? <li>暂无已保存 LLM 配置</li> : llmProfiles.map((profile) => (
+                    <li key={profile.id}>
+                      <button className="profile-main" onClick={() => applyLLMProfile(profile)} type="button">
+                        <strong>{profile.label}</strong>
+                        <span>{profile.model} · {profile.apiBase} · {maskSecret(profile.apiKey)}</span>
+                      </button>
+                      <button className="danger subtle" disabled={busy} onClick={() => deleteLLMProfile(profile.id)} type="button">删除</button>
+                    </li>
+                  ))}
+                </ul>
               </div>
             ) : null}
             <button disabled={busy || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">抽取世界</button>
