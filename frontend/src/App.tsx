@@ -52,6 +52,9 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
+  const [manualNodeName, setManualNodeName] = useState("");
+  const [manualNodeType, setManualNodeType] = useState("人物");
+  const [manualNodeSummary, setManualNodeSummary] = useState("");
   const [extractMode, setExtractMode] = useState<"rules" | "llm">("rules");
   const [llmApiBase, setLlmApiBase] = useState("https://api.openai.com/v1");
   const [llmModel, setLlmModel] = useState("gpt-4o-mini");
@@ -265,20 +268,13 @@ export default function App() {
       setStatus(`已导入 ${uploaded.length} 份资料，等待抽取`);
     }, "资料文件已导入");
   }
-  function handleAddNode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const name = String(form.get("nodeName") ?? "").trim();
-    const type = String(form.get("nodeType") ?? "").trim() || "人物";
-    const summary = String(form.get("nodeSummary") ?? "").trim();
+  function handleAddNode() {
+    const name = manualNodeName.trim();
+    const type = manualNodeType.trim() || "人物";
+    const summary = manualNodeSummary.trim();
     if (!name) {
       setStatus("请填写节点名称");
       window.alert("请填写节点名称");
-      return;
-    }
-    if (!type) {
-      setStatus("请填写节点类型");
       return;
     }
     runAction(async () => {
@@ -287,10 +283,14 @@ export default function App() {
       await refreshProject(projectId);
       setSelectedNodeId(node.id);
       setGraphNodeQuery(`${node.name} · ${node.type}`);
-      formElement.reset();
+      setManualNodeName("");
+      setManualNodeType("人物");
+      setManualNodeSummary("");
       setStatus(`节点已添加：${node.name}`);
+      window.alert(`节点已添加：${node.name}`);
     }, `节点已添加：${name}`, true);
   }
+
 
   function handleAddRelationship(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -557,13 +557,13 @@ export default function App() {
           <section className="panel form-panel">
             <div className="section-head"><h2>手动添加</h2><span>{status}</span></div>
             <div className="form-grid">
-              <form className="stack" onSubmit={handleAddNode}>
+              <div className="stack">
                 <strong>节点</strong>
-                <input name="nodeName" placeholder="名称，例如：林曜" />
-                <input defaultValue="人物" name="nodeType" placeholder="类型，例如：人物 / 组织 / 物品" />
-                <textarea name="nodeSummary" placeholder="节点简介" />
-                <button disabled={busy || !activeProjectId} title={!activeProjectId ? "请先选择或创建项目" : ""} type="submit">添加节点</button>
-              </form>
+                <input onChange={(event) => setManualNodeName(event.target.value)} placeholder="名称，例如：林曜" value={manualNodeName} />
+                <input onChange={(event) => setManualNodeType(event.target.value)} placeholder="类型，例如：人物 / 组织 / 物品" value={manualNodeType} />
+                <textarea onChange={(event) => setManualNodeSummary(event.target.value)} placeholder="节点简介" value={manualNodeSummary} />
+                <button disabled={busy || !activeProjectId} onClick={handleAddNode} title={!activeProjectId ? "请先选择或创建项目" : ""} type="button">添加节点</button>
+              </div>
 
               <form className="stack" onSubmit={handleAddRelationship}>
                 <strong>关系</strong>
