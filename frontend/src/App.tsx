@@ -272,7 +272,14 @@ export default function App() {
     const name = String(form.get("nodeName") ?? "").trim();
     const type = String(form.get("nodeType") ?? "人物").trim();
     const summary = String(form.get("nodeSummary") ?? "").trim();
-    if (!name) return;
+    if (!name) {
+      setStatus("请填写节点名称");
+      return;
+    }
+    if (!type) {
+      setStatus("请填写节点类型");
+      return;
+    }
     runAction(async () => {
       const projectId = requireProject();
       const node = await api.addNode(projectId, { name, type, summary });
