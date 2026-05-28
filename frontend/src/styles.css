@@ -703,4 +703,9 @@ button.subtle {
     transform: translateX(245%);
   }
 }
+.timeline-panel,
+.lore-panel,
+.report-panel {
+  grid-column: 1 / -1;
+}
 

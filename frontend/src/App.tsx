@@ -50,6 +50,7 @@ export default function App() {
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
   const [busy, setBusy] = useState(false);
+  const [activeView, setActiveView] = useState<"map" | "timeline" | "lore" | "report">("map");
   const [extracting, setExtracting] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
@@ -553,10 +554,10 @@ export default function App() {
       <section className="main-area">
         <header className="topbar">
           <nav>
-            <button className="active" type="button"><Network size={16} />地图</button>
-            <button type="button"><GitBranch size={16} />时间线</button>
-            <button type="button"><Layers3 size={16} />设定库</button>
-            <button type="button"><ScrollText size={16} />报告</button>
+            <button className={activeView === "map" ? "active" : ""} onClick={() => setActiveView("map")} type="button"><Network size={16} />地图</button>
+            <button className={activeView === "timeline" ? "active" : ""} onClick={() => setActiveView("timeline")} type="button"><GitBranch size={16} />时间线</button>
+            <button className={activeView === "lore" ? "active" : ""} onClick={() => setActiveView("lore")} type="button"><Layers3 size={16} />设定库</button>
+            <button className={activeView === "report" ? "active" : ""} onClick={() => setActiveView("report")} type="button"><ScrollText size={16} />报告</button>
           </nav>
           <button className="primary" disabled={busy || !activeProjectId} onClick={handlePrediction} type="button">
             <Play size={16} />推演剧情
@@ -564,6 +565,8 @@ export default function App() {
         </header>
 
         <div className="content-grid">
+          {activeView === "map" ? (
+          <>
           <section className="panel form-panel">
             <div className="section-head"><h2>手动添加</h2><span>{status}</span></div>
             <div className="form-grid">
@@ -670,6 +673,9 @@ export default function App() {
             </div>
           </section>
 
+          </>
+          ) : null}
+          {activeView === "timeline" ? (
           <section className="panel timeline-panel">
             <div className="section-head"><h2>时间发展线</h2><span>按作品内时间排序</span></div>
             <ol className="timeline">
@@ -677,15 +683,20 @@ export default function App() {
             </ol>
           </section>
 
+          ) : null}
+          {activeView === "lore" ? (
           <section className="panel lore-panel">
             <div className="section-head"><h2>世界观设定</h2><span>{loreEntries.length} 条</span></div>
             <ul className="lore-list">{loreEntries.length === 0 ? sources.map((source) => <li key={source.id}><strong>{source.title}</strong><span>{source.type} · {source.extracted_at ? "已抽取" : "待抽取"}</span></li>) : loreEntries.map((entry) => <li key={entry.id}><strong>{entry.title}</strong><span>{entry.type}</span><p>{entry.content}</p></li>)}</ul>
           </section>
 
+          ) : null}
+          {activeView === "report" ? (
           <section className="panel report-panel">
             <div className="section-head"><h2>剧情推演</h2><span>{report ? report.latest_event : "等待推演"}</span></div>
             {report ? <div className="report"><p>{report.summary}</p><strong>可能分支</strong><ul>{report.branches.map((branch) => <li key={branch}>{branch}</li>)}</ul><strong>待确认问题</strong><ul>{report.open_questions.map((question) => <li key={question}>{question}</li>)}</ul></div> : <p>添加节点和时间线事件后，点击“推演剧情”生成第一版走向。</p>}
           </section>
+          ) : null}
         </div>
       </section>
     </main>
