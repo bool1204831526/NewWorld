@@ -146,6 +146,11 @@ export const api = {
     projectId: string,
     payload: { title: string; time_label: string; time_order: number; description: string; participant_node_ids: string[] },
   ) => request<TimelineEvent>(`/projects/${projectId}/timeline-events`, { method: "POST", body: JSON.stringify(payload) }),
+  updateTimelineEvent: (
+    projectId: string,
+    eventId: string,
+    payload: { title: string; time_label: string; time_order: number; description: string; participant_node_ids: string[] },
+  ) => request<TimelineEvent>(`/projects/${projectId}/timeline-events/${eventId}`, { method: "PUT", body: JSON.stringify(payload) }),
   createPrediction: (projectId: string) =>
     request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
 };

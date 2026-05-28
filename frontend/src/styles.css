@@ -751,4 +751,71 @@ button.subtle {
   font-style: normal;
   font-weight: 800;
 }
+.timeline-flow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+  margin-top: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.timeline-flow-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+.timeline-card {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  width: 240px;
+  min-height: 150px;
+  border-color: var(--line);
+  padding: 12px;
+  text-align: left;
+  background: #fff;
+}
+
+.timeline-card.active {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(35, 93, 143, 0.12);
+}
+
+.timeline-card time {
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.timeline-card strong,
+.timeline-card p {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.timeline-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.timeline-arrow {
+  color: var(--blue);
+  font-size: 24px;
+  font-weight: 800;
+}
+
+.timeline-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfd;
+}
 

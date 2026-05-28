@@ -307,4 +307,22 @@ def test_merge_node_rewrites_relationships_and_timeline() -> None:
 
     timeline = client.get(f"/api/projects/{project['id']}/timeline").json()
     assert timeline[0]["participant_node_ids"] == [target["id"]]
+def test_update_timeline_event() -> None:
+    project_response = client.post("/api/projects", json={"name": "时间线编辑测试"})
+    project = project_response.json()
+    event = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "旧事件", "time_label": "第一章", "time_order": 2, "description": "旧描述", "participant_node_ids": []},
+    ).json()
+
+    response = client.put(
+        f"/api/projects/{project['id']}/timeline-events/{event['id']}",
+        json={"title": "新事件", "time_label": "第二章", "time_order": 1, "description": "新描述", "participant_node_ids": []},
+    )
+    assert response.status_code == 200
+    assert response.json()["title"] == "新事件"
+
+    timeline = client.get(f"/api/projects/{project['id']}/timeline").json()
+    assert timeline[0]["title"] == "新事件"
+    assert timeline[0]["time_label"] == "第二章"
 

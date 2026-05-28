@@ -46,6 +46,7 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [graph, setGraph] = useState<GraphResponse>(emptyGraph);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [editingEventId, setEditingEventId] = useState("");
   const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
@@ -85,6 +86,7 @@ export default function App() {
   const relationshipTargetNode = findNodeBySearchValue(relationshipTargetQuery);
   const mergeCandidateNode = findNodeBySearchValue(mergeNodeQuery);
   const selectedRelationship = relationshipLabels.find((relationship) => relationship.id === selectedRelationshipId);
+  const editingEvent = events.find((event) => event.id === editingEventId);
   const selectedRelationships = useMemo(() => {
     if (!selectedNode) return [];
     return relationshipLabels.filter((relationship) =>
@@ -456,6 +458,31 @@ export default function App() {
       await refreshProject(projectId);
     }, "节点已删除");
   }
+  function handleUpdateTimelineEvent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingEvent) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const title = String(form.get("editEventTitle") ?? "").trim();
+    const time_label = String(form.get("editTimeLabel") ?? "").trim();
+    const time_order = Number(form.get("editTimeOrder") ?? 0);
+    const description = String(form.get("editEventDescription") ?? "").trim();
+    if (!title || !time_label) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      await api.updateTimelineEvent(projectId, editingEvent.id, {
+        title,
+        time_label,
+        time_order,
+        description,
+        participant_node_ids: editingEvent.participant_node_ids,
+      });
+      await refreshProject(projectId);
+      setEditingEventId("");
+    }, "时间线事件已更新");
+  }
+
+
   function handlePrediction() {
     runAction(async () => {
       const projectId = requireProject();
@@ -691,12 +718,33 @@ export default function App() {
           ) : null}
           {activeView === "timeline" ? (
           <section className="panel timeline-panel">
-            <div className="section-head"><h2>时间发展线</h2><span>按作品内时间排序</span></div>
-            <ol className="timeline">
-              {events.map((event) => <li key={event.id}><time>{event.time_label}</time><strong>{event.title}</strong><p>{event.description || "暂无描述"}</p></li>)}
-            </ol>
+            <div className="section-head"><h2>时间发展线</h2><span>{events.length} 个事件 · 抽取后自动增量更新</span></div>
+            <div className="timeline-flow">
+              {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : events.map((event, index) => (
+                <div className="timeline-flow-step" key={event.id}>
+                  <button className={editingEventId === event.id ? "timeline-card active" : "timeline-card"} onClick={() => setEditingEventId(event.id)} type="button">
+                    <time>{event.time_label}</time>
+                    <strong>{event.title}</strong>
+                    <p>{event.description || "暂无描述"}</p>
+                  </button>
+                  {index < events.length - 1 ? <span className="timeline-arrow">→</span> : null}
+                </div>
+              ))}
+            </div>
+            {editingEvent ? (
+              <form className="timeline-editor" onSubmit={handleUpdateTimelineEvent}>
+                <strong>修改流程节点</strong>
+                <input name="editEventTitle" defaultValue={editingEvent.title} placeholder="事件标题" />
+                <input name="editTimeLabel" defaultValue={editingEvent.time_label} placeholder="时间，例如：第一章" />
+                <input name="editTimeOrder" defaultValue={editingEvent.time_order} type="number" placeholder="排序数字" />
+                <textarea name="editEventDescription" defaultValue={editingEvent.description} placeholder="事件描述" />
+                <div className="button-row">
+                  <button disabled={busy} type="submit">保存修改</button>
+                  <button disabled={busy} onClick={() => setEditingEventId("")} type="button">取消</button>
+                </div>
+              </form>
+            ) : null}
           </section>
-
           ) : null}
           {activeView === "lore" ? (
           <section className="panel lore-panel">

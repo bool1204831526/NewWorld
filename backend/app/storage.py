@@ -294,6 +294,20 @@ class SQLiteStore:
             )
         return event
 
+    def get_timeline_event(self, event_id: str) -> Optional[TimelineEvent]:
+        return self._get_one(TimelineEvent, "timeline_events", event_id)
+
+    def update_timeline_event(self, event: TimelineEvent) -> TimelineEvent:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO timeline_events (id, project_id, time_order, data) VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET time_order = excluded.time_order, data = excluded.data
+                """,
+                (event.id, event.project_id, event.time_order, serialize(event)),
+            )
+        return event
+
     def list_timeline_events(self, project_id: str) -> List[TimelineEvent]:
         return self._list_by_project(TimelineEvent, "timeline_events", project_id, "time_order ASC")
 

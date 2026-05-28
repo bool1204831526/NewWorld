@@ -220,6 +220,20 @@ def add_timeline_event(project_id: str, payload: CreateTimelineEventRequest) -> 
     return store.save_timeline_event(event)
 
 
+@router.put("/projects/{project_id}/timeline-events/{event_id}")
+def update_timeline_event(project_id: str, event_id: str, payload: CreateTimelineEventRequest) -> TimelineEvent:
+    ensure_project(project_id)
+    existing = store.get_timeline_event(event_id)
+    if not existing or existing.project_id != project_id:
+        raise HTTPException(status_code=404, detail="时间线事件不存在")
+    existing.title = payload.title
+    existing.time_label = payload.time_label
+    existing.time_order = payload.time_order
+    existing.description = payload.description
+    existing.participant_node_ids = payload.participant_node_ids
+    return store.update_timeline_event(existing)
+
+
 @router.post("/projects/{project_id}/predictions")
 def create_prediction(project_id: str) -> PredictionReport:
     ensure_project(project_id)
