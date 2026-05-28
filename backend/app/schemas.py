@@ -6,15 +6,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-
 def new_id(prefix: str) -> str:
     return f"{prefix}_{uuid4().hex[:12]}"
-
 
 class CreateProjectRequest(BaseModel):
     name: str = Field(min_length=1)
     description: str = ""
-
 
 class Project(BaseModel):
     id: str
@@ -34,12 +31,10 @@ class Project(BaseModel):
             updated_at=now,
         )
 
-
 class CreateSourceRequest(BaseModel):
     title: str = Field(min_length=1)
     type: str = "剧情资料"
     content: str = Field(min_length=1)
-
 
 class Source(BaseModel):
     id: str
@@ -48,6 +43,8 @@ class Source(BaseModel):
     type: str
     content: str
     created_at: datetime
+    extracted_at: Optional[datetime] = None
+    extraction_version: Optional[str] = None
 
     @classmethod
     def create(cls, project_id: str, title: str, type: str, content: str) -> "Source":
@@ -60,12 +57,10 @@ class Source(BaseModel):
             created_at=datetime.utcnow(),
         )
 
-
 class CreateNodeRequest(BaseModel):
     name: str = Field(min_length=1)
     type: str = "人物"
     summary: str = ""
-
 
 class Node(BaseModel):
     id: str
@@ -90,13 +85,11 @@ class Node(BaseModel):
             summary=summary,
         )
 
-
 class CreateRelationshipRequest(BaseModel):
     source_node_id: str
     target_node_id: str
     type: str = "关联"
     summary: str = ""
-
 
 class Relationship(BaseModel):
     id: str
@@ -129,7 +122,6 @@ class Relationship(BaseModel):
             summary=summary,
         )
 
-
 class LoreEntry(BaseModel):
     id: str
     project_id: str
@@ -151,14 +143,12 @@ class LoreEntry(BaseModel):
             content=content,
         )
 
-
 class CreateTimelineEventRequest(BaseModel):
     title: str = Field(min_length=1)
     time_label: str
     time_order: int = 0
     description: str = ""
     participant_node_ids: List[str] = []
-
 
 class TimelineEvent(BaseModel):
     id: str
@@ -191,11 +181,9 @@ class TimelineEvent(BaseModel):
             participant_node_ids=participant_node_ids,
         )
 
-
 class GraphResponse(BaseModel):
     nodes: List[Node]
     relationships: List[Relationship]
-
 
 class PredictionReport(BaseModel):
     project_id: str
@@ -204,10 +192,12 @@ class PredictionReport(BaseModel):
     latest_event: str
     open_questions: List[str]
 
-
 class ExtractionResult(BaseModel):
     project_id: str
     created_nodes: int
     created_relationships: int
     created_lore_entries: int
     created_timeline_events: int
+    processed_sources: int
+    skipped_sources: int
+

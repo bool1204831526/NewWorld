@@ -1,8 +1,9 @@
 ﻿from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from app.extractor import extract_world
 from app.schemas import (
@@ -62,6 +63,38 @@ def add_source(project_id: str, payload: CreateSourceRequest) -> Source:
     return store.save_source(source)
 
 
+
+SUPPORTED_SOURCE_SUFFIXES = {".txt", ".md", ".markdown"}
+
+def decode_source_file(content: bytes) -> str:
+    for encoding in ("utf-8-sig", "utf-8", "gb18030"):
+        try:
+            return content.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    raise HTTPException(status_code=400, detail="文件编码不支持，请使用 UTF-8 或 GB18030 文本文件")
+
+@router.post("/projects/{project_id}/sources/upload")
+async def upload_sources(
+    project_id: str,
+    files: List[UploadFile] = File(...),
+    type: str = Form("剧情资料"),
+) -> List[Source]:
+    ensure_project(project_id)
+    created_sources: List[Source] = []
+    for file in files:
+        filename = file.filename or "未命名资料.txt"
+        suffix = Path(filename).suffix.lower()
+        if suffix not in SUPPORTED_SOURCE_SUFFIXES:
+            raise HTTPException(status_code=400, detail=f"暂不支持 {suffix or '无扩展名'} 文件，请上传 txt 或 md")
+        content = decode_source_file(await file.read()).strip()
+        if not content:
+            raise HTTPException(status_code=400, detail=f"{filename} 内容为空")
+        title = Path(filename).stem or filename
+        source = Source.create(project_id=project_id, title=title, type=type, content=content)
+        created_sources.append(store.save_source(source))
+    return created_sources
+
 @router.get("/projects/{project_id}/sources")
 def list_sources(project_id: str) -> List[Source]:
     ensure_project(project_id)
@@ -71,13 +104,15 @@ def list_sources(project_id: str) -> List[Source]:
 @router.post("/projects/{project_id}/extract")
 def extract_project(project_id: str) -> ExtractionResult:
     ensure_project(project_id)
-    created_nodes, created_relationships, created_lore_entries, created_timeline_events = extract_world(project_id, store)
+    created_nodes, created_relationships, created_lore_entries, created_timeline_events, processed_sources, skipped_sources = extract_world(project_id, store)
     return ExtractionResult(
         project_id=project_id,
         created_nodes=created_nodes,
         created_relationships=created_relationships,
         created_lore_entries=created_lore_entries,
         created_timeline_events=created_timeline_events,
+        processed_sources=processed_sources,
+        skipped_sources=skipped_sources,
     )
 
 
@@ -166,3 +201,4 @@ def create_prediction(project_id: str) -> PredictionReport:
             "哪些世界观规则会限制剧情走向？",
         ],
     )
+

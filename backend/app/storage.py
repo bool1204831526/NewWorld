@@ -9,11 +9,9 @@ from pydantic import BaseModel
 
 from app.schemas import LoreEntry, Node, Project, Relationship, Source, TimelineEvent
 
-
 T = TypeVar("T", bound=BaseModel)
 
 DEFAULT_DB_PATH = Path(__file__).resolve().parents[2] / "data" / "newworld.db"
-
 
 class SQLiteStore:
     def __init__(self, db_path: Optional[Path] = None) -> None:
@@ -117,13 +115,21 @@ class SQLiteStore:
     def save_source(self, source: Source) -> Source:
         with self.connect() as connection:
             connection.execute(
-                "INSERT INTO sources (id, project_id, data, created_at) VALUES (?, ?, ?, ?)",
+                """
+                INSERT INTO sources (id, project_id, data, created_at) VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET data = excluded.data
+                """,
                 (source.id, source.project_id, serialize(source), source.created_at.isoformat()),
             )
         return source
 
     def list_sources(self, project_id: str) -> List[Source]:
         return self._list_by_project(Source, "sources", project_id, "created_at ASC")
+
+
+    def mark_source_extracted(self, source: Source) -> Source:
+        self.save_source(source)
+        return source
 
     def save_node(self, node: Node) -> Node:
         with self.connect() as connection:
@@ -193,17 +199,14 @@ class SQLiteStore:
             ).fetchall()
         return parse_many(model, rows)
 
-
 def serialize(model: BaseModel) -> str:
     return model.model_dump_json()
-
 
 def parse_one(model: Type[T], data: str) -> T:
     return model.model_validate_json(data)
 
-
 def parse_many(model: Type[T], rows: Sequence[sqlite3.Row]) -> List[T]:
     return [parse_one(model, row["data"]) for row in rows]
 
-
 store = SQLiteStore()
+

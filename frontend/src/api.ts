@@ -12,6 +12,8 @@ export interface Source {
   title: string;
   type: string;
   content: string;
+  extracted_at?: string | null;
+  extraction_version?: string | null;
 }
 
 export interface NodeItem {
@@ -46,6 +48,8 @@ export interface ExtractionResult {
   created_relationships: number;
   created_lore_entries: number;
   created_timeline_events: number;
+  processed_sources: number;
+  skipped_sources: number;
 }
 
 export interface TimelineEvent {
@@ -86,6 +90,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+
+async function uploadRequest<T>(path: string, formData: FormData): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    body: formData,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    throw new Error(data?.detail ?? "上传失败");
+  }
+  return data as T;
+}
 export const api = {
   listProjects: () => request<Project[]>("/projects"),
   createProject: (payload: { name: string; description?: string }) =>
@@ -93,6 +109,12 @@ export const api = {
   listSources: (projectId: string) => request<Source[]>(`/projects/${projectId}/sources`),
   addSource: (projectId: string, payload: { title: string; type: string; content: string }) =>
     request<Source>(`/projects/${projectId}/sources`, { method: "POST", body: JSON.stringify(payload) }),
+  uploadSources: (projectId: string, files: File[], type: string) => {
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    formData.append("type", type);
+    return uploadRequest<Source[]>(`/projects/${projectId}/sources/upload`, formData);
+  },
   getGraph: (projectId: string) => request<GraphResponse>(`/projects/${projectId}/graph`),
   getLore: (projectId: string) => request<LoreEntry[]>(`/projects/${projectId}/lore`),
   extractProject: (projectId: string) =>
@@ -111,3 +133,4 @@ export const api = {
   createPrediction: (projectId: string) =>
     request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
 };
+

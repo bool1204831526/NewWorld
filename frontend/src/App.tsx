@@ -105,6 +105,21 @@ export default function App() {
     }, "来源资料已保存");
   }
 
+  function handleUploadSources(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const files = Array.from(form.getAll("sourceFiles")).filter((file): file is File => file instanceof File && file.size > 0);
+    const type = String(form.get("uploadSourceType") ?? "剧情资料");
+    if (files.length === 0) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      const uploaded = await api.uploadSources(projectId, files, type);
+      await refreshProject(projectId);
+      formElement.reset();
+      setStatus(`已导入 ${uploaded.length} 份资料，等待抽取`);
+    }, "资料文件已导入");
+  }
   function handleAddNode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const formElement = event.currentTarget;
@@ -162,14 +177,13 @@ export default function App() {
     }, "时间线事件已添加");
   }
 
-
   function handleExtractWorld() {
     runAction(async () => {
       const projectId = requireProject();
       const result = await api.extractProject(projectId);
       await refreshProject(projectId);
       setReport(null);
-      setStatus(`抽取完成：节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
+      setStatus(`抽取完成：处理 ${result.processed_sources} 份，跳过 ${result.skipped_sources} 份；新增节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
     }, "抽取完成");
   }
   function handlePrediction() {
@@ -216,7 +230,14 @@ export default function App() {
             <textarea name="sourceContent" placeholder="粘贴小说剧情、人物设定、世界观设定或章节摘要。" />
             <div className="button-row"><button disabled={busy || !activeProjectId} type="submit">保存资料</button><button disabled={busy || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">抽取世界</button></div>
           </form>
-          <p className="status">{sources.length} 份来源资料</p>
+          <form className="stack upload-box" onSubmit={handleUploadSources}>
+            <select name="uploadSourceType" defaultValue="剧情资料">
+              <option>剧情资料</option><option>人物设定</option><option>世界观设定</option><option>章节摘要</option>
+            </select>
+            <input accept=".txt,.md,.markdown,text/plain,text/markdown" multiple name="sourceFiles" type="file" />
+            <button disabled={busy || !activeProjectId} type="submit">导入文件</button>
+          </form>
+          <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取</p>
         </section>
       </aside>
 
@@ -285,7 +306,7 @@ export default function App() {
 
           <section className="panel lore-panel">
             <div className="section-head"><h2>世界观设定</h2><span>{loreEntries.length} 条</span></div>
-            <ul className="lore-list">{loreEntries.length === 0 ? sources.map((source) => <li key={source.id}><strong>{source.title}</strong><span>{source.type}</span></li>) : loreEntries.map((entry) => <li key={entry.id}><strong>{entry.title}</strong><span>{entry.type}</span><p>{entry.content}</p></li>)}</ul>
+            <ul className="lore-list">{loreEntries.length === 0 ? sources.map((source) => <li key={source.id}><strong>{source.title}</strong><span>{source.type} · {source.extracted_at ? "已抽取" : "待抽取"}</span></li>) : loreEntries.map((entry) => <li key={entry.id}><strong>{entry.title}</strong><span>{entry.type}</span><p>{entry.content}</p></li>)}</ul>
           </section>
 
           <section className="panel report-panel">

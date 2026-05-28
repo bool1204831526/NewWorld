@@ -8,19 +8,15 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.storage import store
 
-
 client = TestClient(app)
-
 
 def setup_function() -> None:
     store.reset()
-
 
 def test_health_check() -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
-
 
 def test_create_project_and_node_flow() -> None:
     project_response = client.post(
@@ -45,7 +41,6 @@ def test_create_project_and_node_flow() -> None:
     graph_response = client.get(f"/api/projects/{project['id']}/graph")
     assert graph_response.status_code == 200
     assert graph_response.json()["nodes"][0]["name"] == "林曜"
-
 
 def test_timeline_and_prediction_flow() -> None:
     project_response = client.post("/api/projects", json={"name": "时间线测试"})
@@ -78,7 +73,6 @@ def test_timeline_and_prediction_flow() -> None:
     prediction_response = client.post(f"/api/projects/{project['id']}/predictions")
     assert prediction_response.status_code == 200
     assert prediction_response.json()["latest_event"] == "王印失踪"
-
 
 def test_extract_project_from_source_flow() -> None:
     project_response = client.post("/api/projects", json={"name": "抽取测试"})
@@ -115,3 +109,36 @@ def test_extract_project_from_source_flow() -> None:
     timeline_response = client.get(f"/api/projects/{project['id']}/timeline")
     assert timeline_response.status_code == 200
     assert timeline_response.json()[0]["time_label"] == "第一章"
+
+    sources_response = client.get(f"/api/projects/{project['id']}/sources")
+    assert sources_response.json()[0]["extracted_at"] is not None
+
+    second_extract_response = client.post(f"/api/projects/{project['id']}/extract")
+    assert second_extract_response.status_code == 200
+    second_result = second_extract_response.json()
+    assert second_result["processed_sources"] == 0
+    assert second_result["skipped_sources"] == 1
+    assert second_result["created_nodes"] == 0
+    assert second_result["created_lore_entries"] == 0
+
+def test_upload_source_file_flow() -> None:
+    project_response = client.post("/api/projects", json={"name": "上传测试"})
+    assert project_response.status_code == 200
+    project = project_response.json()
+
+    upload_response = client.post(
+        f"/api/projects/{project['id']}/sources/upload",
+        data={"type": "世界观设定"},
+        files={"files": ("灰塔设定.md", "灰塔禁令：旧术不能公开使用。第一章，林曜进入灰塔。", "text/markdown")},
+    )
+    assert upload_response.status_code == 200
+    uploaded = upload_response.json()
+    assert len(uploaded) == 1
+    assert uploaded[0]["title"] == "灰塔设定"
+    assert uploaded[0]["type"] == "世界观设定"
+    assert uploaded[0]["extracted_at"] is None
+
+    extract_response = client.post(f"/api/projects/{project['id']}/extract")
+    assert extract_response.status_code == 200
+    assert extract_response.json()["processed_sources"] == 1
+
