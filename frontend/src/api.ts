@@ -32,6 +32,22 @@ export interface Relationship {
   summary: string;
 }
 
+export interface LoreEntry {
+  id: string;
+  project_id: string;
+  type: string;
+  title: string;
+  content: string;
+}
+
+export interface ExtractionResult {
+  project_id: string;
+  created_nodes: number;
+  created_relationships: number;
+  created_lore_entries: number;
+  created_timeline_events: number;
+}
+
 export interface TimelineEvent {
   id: string;
   project_id: string;
@@ -78,6 +94,9 @@ export const api = {
   addSource: (projectId: string, payload: { title: string; type: string; content: string }) =>
     request<Source>(`/projects/${projectId}/sources`, { method: "POST", body: JSON.stringify(payload) }),
   getGraph: (projectId: string) => request<GraphResponse>(`/projects/${projectId}/graph`),
+  getLore: (projectId: string) => request<LoreEntry[]>(`/projects/${projectId}/lore`),
+  extractProject: (projectId: string) =>
+    request<ExtractionResult>(`/projects/${projectId}/extract`, { method: "POST" }),
   addNode: (projectId: string, payload: { name: string; type: string; summary: string }) =>
     request<NodeItem>(`/projects/${projectId}/nodes`, { method: "POST", body: JSON.stringify(payload) }),
   addRelationship: (

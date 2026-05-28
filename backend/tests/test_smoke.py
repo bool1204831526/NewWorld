@@ -78,3 +78,40 @@ def test_timeline_and_prediction_flow() -> None:
     prediction_response = client.post(f"/api/projects/{project['id']}/predictions")
     assert prediction_response.status_code == 200
     assert prediction_response.json()["latest_event"] == "王印失踪"
+
+
+def test_extract_project_from_source_flow() -> None:
+    project_response = client.post("/api/projects", json={"name": "抽取测试"})
+    assert project_response.status_code == 200
+    project = project_response.json()
+
+    source_response = client.post(
+        f"/api/projects/{project['id']}/sources",
+        json={
+            "title": "第一章设定",
+            "type": "剧情资料",
+            "content": "林曜：北境少年，寻找北境王印。北境王印：继承权凭证。第一章，林曜进入雾港寻找北境王印。灰塔禁令规定旧术不能公开使用。",
+        },
+    )
+    assert source_response.status_code == 200
+
+    extract_response = client.post(f"/api/projects/{project['id']}/extract")
+    assert extract_response.status_code == 200
+    result = extract_response.json()
+    assert result["created_nodes"] >= 2
+    assert result["created_relationships"] >= 1
+    assert result["created_lore_entries"] >= 1
+    assert result["created_timeline_events"] >= 1
+
+    graph_response = client.get(f"/api/projects/{project['id']}/graph")
+    node_names = {node["name"] for node in graph_response.json()["nodes"]}
+    assert "林曜" in node_names
+    assert "北境王印" in node_names
+
+    lore_response = client.get(f"/api/projects/{project['id']}/lore")
+    assert lore_response.status_code == 200
+    assert len(lore_response.json()) >= 1
+
+    timeline_response = client.get(f"/api/projects/{project['id']}/timeline")
+    assert timeline_response.status_code == 200
+    assert timeline_response.json()[0]["time_label"] == "第一章"

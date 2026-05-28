@@ -4,13 +4,16 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException
 
+from app.extractor import extract_world
 from app.schemas import (
     CreateNodeRequest,
     CreateProjectRequest,
     CreateRelationshipRequest,
     CreateSourceRequest,
     CreateTimelineEventRequest,
+    ExtractionResult,
     GraphResponse,
+    LoreEntry,
     Node,
     PredictionReport,
     Project,
@@ -63,6 +66,25 @@ def add_source(project_id: str, payload: CreateSourceRequest) -> Source:
 def list_sources(project_id: str) -> List[Source]:
     ensure_project(project_id)
     return store.list_sources(project_id)
+
+
+@router.post("/projects/{project_id}/extract")
+def extract_project(project_id: str) -> ExtractionResult:
+    ensure_project(project_id)
+    created_nodes, created_relationships, created_lore_entries, created_timeline_events = extract_world(project_id, store)
+    return ExtractionResult(
+        project_id=project_id,
+        created_nodes=created_nodes,
+        created_relationships=created_relationships,
+        created_lore_entries=created_lore_entries,
+        created_timeline_events=created_timeline_events,
+    )
+
+
+@router.get("/projects/{project_id}/lore")
+def get_lore(project_id: str) -> List[LoreEntry]:
+    ensure_project(project_id)
+    return store.list_lore_entries(project_id)
 
 
 @router.get("/projects/{project_id}/graph")

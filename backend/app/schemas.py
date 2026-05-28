@@ -141,6 +141,16 @@ class LoreEntry(BaseModel):
     confidence: float = 1.0
     source_refs: List[str] = []
 
+    @classmethod
+    def create(cls, project_id: str, type: str, title: str, content: str) -> "LoreEntry":
+        return cls(
+            id=new_id("lore"),
+            project_id=project_id,
+            type=type,
+            title=title,
+            content=content,
+        )
+
 
 class CreateTimelineEventRequest(BaseModel):
     title: str = Field(min_length=1)
@@ -194,3 +204,10 @@ class PredictionReport(BaseModel):
     latest_event: str
     open_questions: List[str]
 
+
+class ExtractionResult(BaseModel):
+    project_id: str
+    created_nodes: int
+    created_relationships: int
+    created_lore_entries: int
+    created_timeline_events: int

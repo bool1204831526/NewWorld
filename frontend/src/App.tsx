@@ -1,6 +1,6 @@
 ﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { BookOpen, GitBranch, Layers3, Network, Play, Plus, ScrollText, Sparkles } from "lucide-react";
-import { GraphResponse, PredictionReport, Project, Source, TimelineEvent, api } from "./api";
+import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineEvent, api } from "./api";
 import "./styles.css";
 
 const emptyGraph: GraphResponse = { nodes: [], relationships: [] };
@@ -11,6 +11,7 @@ export default function App() {
   const [sources, setSources] = useState<Source[]>([]);
   const [graph, setGraph] = useState<GraphResponse>(emptyGraph);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
+  const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
   const [busy, setBusy] = useState(false);
@@ -26,14 +27,16 @@ export default function App() {
   }, [graph]);
 
   async function refreshProject(projectId: string) {
-    const [nextSources, nextGraph, nextEvents] = await Promise.all([
+    const [nextSources, nextGraph, nextEvents, nextLore] = await Promise.all([
       api.listSources(projectId),
       api.getGraph(projectId),
       api.getTimeline(projectId),
+      api.getLore(projectId),
     ]);
     setSources(nextSources);
     setGraph(nextGraph);
     setEvents(nextEvents);
+    setLoreEntries(nextLore);
   }
 
   async function loadProjects() {
@@ -80,6 +83,7 @@ export default function App() {
       setSources([]);
       setGraph(emptyGraph);
       setEvents([]);
+      setLoreEntries([]);
       setReport(null);
       formElement.reset();
     }, "项目已创建");
@@ -158,6 +162,16 @@ export default function App() {
     }, "时间线事件已添加");
   }
 
+
+  function handleExtractWorld() {
+    runAction(async () => {
+      const projectId = requireProject();
+      const result = await api.extractProject(projectId);
+      await refreshProject(projectId);
+      setReport(null);
+      setStatus(`抽取完成：节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
+    }, "抽取完成");
+  }
   function handlePrediction() {
     runAction(async () => {
       const projectId = requireProject();
@@ -200,7 +214,7 @@ export default function App() {
               <option>剧情资料</option><option>人物设定</option><option>世界观设定</option><option>章节摘要</option>
             </select>
             <textarea name="sourceContent" placeholder="粘贴小说剧情、人物设定、世界观设定或章节摘要。" />
-            <button disabled={busy || !activeProjectId} type="submit">保存资料</button>
+            <div className="button-row"><button disabled={busy || !activeProjectId} type="submit">保存资料</button><button disabled={busy || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">抽取世界</button></div>
           </form>
           <p className="status">{sources.length} 份来源资料</p>
         </section>
@@ -270,8 +284,8 @@ export default function App() {
           </section>
 
           <section className="panel lore-panel">
-            <div className="section-head"><h2>来源资料</h2><span>{sources.length} 条</span></div>
-            <ul className="lore-list">{sources.map((source) => <li key={source.id}><strong>{source.title}</strong><span>{source.type}</span></li>)}</ul>
+            <div className="section-head"><h2>世界观设定</h2><span>{loreEntries.length} 条</span></div>
+            <ul className="lore-list">{loreEntries.length === 0 ? sources.map((source) => <li key={source.id}><strong>{source.title}</strong><span>{source.type}</span></li>) : loreEntries.map((entry) => <li key={entry.id}><strong>{entry.title}</strong><span>{entry.type}</span><p>{entry.content}</p></li>)}</ul>
           </section>
 
           <section className="panel report-panel">
@@ -283,3 +297,6 @@ export default function App() {
     </main>
   );
 }
+
+
+

@@ -7,7 +7,7 @@ from typing import List, Optional, Sequence, Type, TypeVar
 
 from pydantic import BaseModel
 
-from app.schemas import Node, Project, Relationship, Source, TimelineEvent
+from app.schemas import LoreEntry, Node, Project, Relationship, Source, TimelineEvent
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -69,6 +69,14 @@ class SQLiteStore:
                     data TEXT NOT NULL,
                     FOREIGN KEY(project_id) REFERENCES projects(id)
                 );
+
+                CREATE TABLE IF NOT EXISTS lore_entries (
+                    id TEXT PRIMARY KEY,
+                    project_id TEXT NOT NULL,
+                    type TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    FOREIGN KEY(project_id) REFERENCES projects(id)
+                );
                 """
             )
 
@@ -77,6 +85,7 @@ class SQLiteStore:
             connection.executescript(
                 """
                 DELETE FROM timeline_events;
+                DELETE FROM lore_entries;
                 DELETE FROM relationships;
                 DELETE FROM nodes;
                 DELETE FROM sources;
@@ -147,6 +156,17 @@ class SQLiteStore:
     def list_relationships(self, project_id: str) -> List[Relationship]:
         return self._list_by_project(Relationship, "relationships", project_id, "id ASC")
 
+    def save_lore_entry(self, entry: LoreEntry) -> LoreEntry:
+        with self.connect() as connection:
+            connection.execute(
+                "INSERT INTO lore_entries (id, project_id, type, data) VALUES (?, ?, ?, ?)",
+                (entry.id, entry.project_id, entry.type, serialize(entry)),
+            )
+        return entry
+
+    def list_lore_entries(self, project_id: str) -> List[LoreEntry]:
+        return self._list_by_project(LoreEntry, "lore_entries", project_id, "id ASC")
+
     def save_timeline_event(self, event: TimelineEvent) -> TimelineEvent:
         with self.connect() as connection:
             connection.execute(
@@ -187,5 +207,3 @@ def parse_many(model: Type[T], rows: Sequence[sqlite3.Row]) -> List[T]:
 
 
 store = SQLiteStore()
-
-
