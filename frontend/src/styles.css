@@ -221,13 +221,30 @@ nav .active {
   text-anchor: middle;
 }
 
+.edge {
+  cursor: pointer;
+}
+
+.edge.related line {
+  stroke: var(--green);
+  stroke-width: 4;
+  opacity: 0.95;
+}
+
+.edge.related text {
+  fill: var(--green);
+  font-size: 14px;
+}
+
 .edge.selected line {
-  stroke: var(--blue);
-  stroke-width: 3;
+  stroke: var(--red);
+  stroke-width: 6;
+  opacity: 1;
 }
 
 .edge.selected text {
-  fill: var(--blue);
+  fill: var(--red);
+  font-size: 15px;
 }
 
 .graph-node {
@@ -707,5 +724,31 @@ button.subtle {
 .lore-panel,
 .report-panel {
   grid-column: 1 / -1;
+}
+.relationship-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #d8b6b6;
+  border-left: 4px solid var(--red);
+  border-radius: 7px;
+  padding: 10px;
+  background: #fff8f8;
+}
+
+.relationship-card div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.relationship-card em {
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: var(--red);
+  background: #f7e8e8;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
 }
 

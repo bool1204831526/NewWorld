@@ -53,6 +53,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<"map" | "timeline" | "lore" | "report">("map");
   const [extracting, setExtracting] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
+  const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [manualNodeName, setManualNodeName] = useState("");
   const [manualNodeType, setManualNodeType] = useState("人物");
@@ -83,6 +84,7 @@ export default function App() {
   const relationshipSourceNode = findNodeBySearchValue(relationshipSourceQuery);
   const relationshipTargetNode = findNodeBySearchValue(relationshipTargetQuery);
   const mergeCandidateNode = findNodeBySearchValue(mergeNodeQuery);
+  const selectedRelationship = relationshipLabels.find((relationship) => relationship.id === selectedRelationshipId);
   const selectedRelationships = useMemo(() => {
     if (!selectedNode) return [];
     return relationshipLabels.filter((relationship) =>
@@ -209,6 +211,7 @@ export default function App() {
       return;
     }
     setSelectedNodeId(node.id);
+    setSelectedRelationshipId("");
     setGraphNodeQuery(`${node.name} · ${node.type}`);
     setStatus(`已定位节点：${node.name}`);
   }
@@ -284,6 +287,7 @@ export default function App() {
       const node = await api.addNode(projectId, { name, type, summary });
       await refreshProject(projectId);
       setSelectedNodeId(node.id);
+      setSelectedRelationshipId("");
       setGraphNodeQuery(`${node.name} · ${node.type}`);
       setManualNodeName("");
       setManualNodeType("人物");
@@ -433,6 +437,7 @@ export default function App() {
       const merged = await api.mergeNode(projectId, selectedNode.id, mergeCandidateNode.id);
       await refreshProject(projectId);
       setSelectedNodeId(merged.id);
+      setSelectedRelationshipId("");
       setGraphNodeQuery(`${merged.name} · ${merged.type}`);
       setMergeNodeQuery("");
     }, "节点已合并", true);
@@ -447,6 +452,7 @@ export default function App() {
       const projectId = requireProject();
       await api.deleteNode(projectId, selectedNode.id);
       setSelectedNodeId("");
+      setSelectedRelationshipId("");
       await refreshProject(projectId);
     }, "节点已删除");
   }
@@ -618,11 +624,12 @@ export default function App() {
                       </marker>
                     </defs>
                     {graphLayout.edges.map((edge) => {
-                      const selected = selectedNode && (edge.source_node_id === selectedNode.id || edge.target_node_id === selectedNode.id);
+                      const relatedToSelectedNode = selectedNode && (edge.source_node_id === selectedNode.id || edge.target_node_id === selectedNode.id);
+                      const selected = selectedRelationshipId === edge.id;
                       const midX = ((edge.source?.x ?? 0) + (edge.target?.x ?? 0)) / 2;
                       const midY = ((edge.source?.y ?? 0) + (edge.target?.y ?? 0)) / 2;
                       return (
-                        <g className={selected ? "edge selected" : "edge"} key={edge.id}>
+                        <g className={selected ? "edge selected" : relatedToSelectedNode ? "edge related" : "edge"} key={edge.id} onClick={() => setSelectedRelationshipId(edge.id)} role="button" tabIndex={0}>
                           <line markerEnd="url(#arrow)" x1={edge.source?.x} x2={edge.target?.x} y1={edge.source?.y} y2={edge.target?.y} />
                           <text x={midX} y={midY}>{edge.type}</text>
                         </g>
@@ -632,7 +639,7 @@ export default function App() {
                       const selected = selectedNode?.id === node.id;
                       const related = node.focusLevel === "related";
                       return (
-                        <g className={selected ? "graph-node selected" : related ? "graph-node related" : node.focusLevel === "outer" ? "graph-node outer" : "graph-node"} key={node.id} onClick={() => setSelectedNodeId(node.id)} role="button" tabIndex={0}>
+                        <g className={selected ? "graph-node selected" : related ? "graph-node related" : node.focusLevel === "outer" ? "graph-node outer" : "graph-node"} key={node.id} onClick={() => { setSelectedNodeId(node.id); setSelectedRelationshipId(""); }} role="button" tabIndex={0}>
                           <circle cx={node.x} cy={node.y} r={selected ? 48 : related ? Math.min(42, 29 + node.connected * 3) : Math.min(28, 18 + node.connected * 2)} />
                           <text x={node.x} y={node.y + 4}>{node.name}</text>
                           <text className="node-type" x={node.x} y={node.y + 24}>{node.type}</text>
@@ -652,6 +659,13 @@ export default function App() {
                     <span>{selectedNode.type}</span>
                     <h3>{selectedNode.name}</h3>
                     <p>{selectedNode.summary || selectedNode.current_state || "暂无节点简介"}</p>
+                    {selectedRelationship ? (
+                      <div className="relationship-card">
+                        <strong>选中关系</strong>
+                        <div><b>{selectedRelationship.sourceName}</b><em>{selectedRelationship.type}</em><b>{selectedRelationship.targetName}</b></div>
+                        <p>{selectedRelationship.summary || "暂无关系说明"}</p>
+                      </div>
+                    ) : null}
                     <div className="merge-node-box">
                       <input list="mergeNodeOptions" onChange={(event) => setMergeNodeQuery(event.target.value)} placeholder="搜索要合并进来的重复节点" value={mergeNodeQuery} />
                       <datalist id="mergeNodeOptions">{nodeSearchOptions.filter((option) => !option.startsWith(`${selectedNode.name} ·`)).map((option) => <option key={option} value={option} />)}</datalist>
