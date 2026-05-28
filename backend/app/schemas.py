@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime
+from typing import List, Optional
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -71,13 +72,13 @@ class Node(BaseModel):
     project_id: str
     name: str
     type: str
-    aliases: list[str] = []
+    aliases: List[str] = []
     summary: str = ""
-    tags: list[str] = []
+    tags: List[str] = []
     importance: int = 50
     current_state: str = ""
     confidence: float = 1.0
-    source_refs: list[str] = []
+    source_refs: List[str] = []
 
     @classmethod
     def create(cls, project_id: str, name: str, type: str, summary: str) -> "Node":
@@ -106,9 +107,9 @@ class Relationship(BaseModel):
     summary: str = ""
     weight: int = 50
     confidence: float = 1.0
-    valid_from: str | None = None
-    valid_to: str | None = None
-    source_refs: list[str] = []
+    valid_from: Optional[str] = None
+    valid_to: Optional[str] = None
+    source_refs: List[str] = []
 
     @classmethod
     def create(
@@ -135,10 +136,10 @@ class LoreEntry(BaseModel):
     type: str
     title: str
     content: str
-    related_node_ids: list[str] = []
-    related_event_ids: list[str] = []
+    related_node_ids: List[str] = []
+    related_event_ids: List[str] = []
     confidence: float = 1.0
-    source_refs: list[str] = []
+    source_refs: List[str] = []
 
 
 class CreateTimelineEventRequest(BaseModel):
@@ -146,7 +147,7 @@ class CreateTimelineEventRequest(BaseModel):
     time_label: str
     time_order: int = 0
     description: str = ""
-    participant_node_ids: list[str] = []
+    participant_node_ids: List[str] = []
 
 
 class TimelineEvent(BaseModel):
@@ -156,9 +157,9 @@ class TimelineEvent(BaseModel):
     time_label: str
     time_order: int
     description: str
-    participant_node_ids: list[str] = []
-    related_lore_ids: list[str] = []
-    source_refs: list[str] = []
+    participant_node_ids: List[str] = []
+    related_lore_ids: List[str] = []
+    source_refs: List[str] = []
 
     @classmethod
     def create(
@@ -168,7 +169,7 @@ class TimelineEvent(BaseModel):
         time_label: str,
         time_order: int,
         description: str,
-        participant_node_ids: list[str],
+        participant_node_ids: List[str],
     ) -> "TimelineEvent":
         return cls(
             id=new_id("event"),
@@ -182,13 +183,14 @@ class TimelineEvent(BaseModel):
 
 
 class GraphResponse(BaseModel):
-    nodes: list[Node]
-    relationships: list[Relationship]
+    nodes: List[Node]
+    relationships: List[Relationship]
 
 
 class PredictionReport(BaseModel):
     project_id: str
     summary: str
-    branches: list[str]
+    branches: List[str]
     latest_event: str
-    open_questions: list[str]
+    open_questions: List[str]
+

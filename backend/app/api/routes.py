@@ -1,4 +1,6 @@
-from __future__ import annotations
+﻿from __future__ import annotations
+
+from typing import Dict, List
 
 from fastapi import APIRouter, HTTPException
 
@@ -21,12 +23,12 @@ from app.schemas import (
 
 router = APIRouter()
 
-projects: dict[str, Project] = {}
-sources: dict[str, list[Source]] = {}
-nodes: dict[str, list[Node]] = {}
-relationships: dict[str, list[Relationship]] = {}
-timeline_events: dict[str, list[TimelineEvent]] = {}
-lore_entries: dict[str, list[LoreEntry]] = {}
+projects: Dict[str, Project] = {}
+sources: Dict[str, List[Source]] = {}
+nodes: Dict[str, List[Node]] = {}
+relationships: Dict[str, List[Relationship]] = {}
+timeline_events: Dict[str, List[TimelineEvent]] = {}
+lore_entries: Dict[str, List[LoreEntry]] = {}
 
 
 def ensure_project(project_id: str) -> Project:
@@ -37,7 +39,7 @@ def ensure_project(project_id: str) -> Project:
 
 
 @router.get("/projects")
-def list_projects() -> list[Project]:
+def list_projects() -> List[Project]:
     return list(projects.values())
 
 
@@ -72,7 +74,7 @@ def add_source(project_id: str, payload: CreateSourceRequest) -> Source:
 
 
 @router.get("/projects/{project_id}/sources")
-def list_sources(project_id: str) -> list[Source]:
+def list_sources(project_id: str) -> List[Source]:
     ensure_project(project_id)
     return sources[project_id]
 
@@ -114,7 +116,7 @@ def add_relationship(project_id: str, payload: CreateRelationshipRequest) -> Rel
 
 
 @router.get("/projects/{project_id}/timeline")
-def get_timeline(project_id: str) -> list[TimelineEvent]:
+def get_timeline(project_id: str) -> List[TimelineEvent]:
     ensure_project(project_id)
     return sorted(timeline_events[project_id], key=lambda event: event.time_order)
 
@@ -156,3 +158,4 @@ def create_prediction(project_id: str) -> PredictionReport:
             "哪些世界观规则会限制剧情走向？",
         ],
     )
+
