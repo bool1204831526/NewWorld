@@ -1,0 +1,1 @@
+"""NewWorld backend application."""
