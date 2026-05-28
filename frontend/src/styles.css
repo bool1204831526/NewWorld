@@ -1,4 +1,4 @@
-:root {
+﻿:root {
   color-scheme: light;
   --ink: #20242b;
   --muted: #667085;
@@ -23,6 +23,8 @@ body {
 }
 
 button,
+input,
+select,
 textarea {
   font: inherit;
 }
@@ -296,7 +298,8 @@ nav .active {
 
 @media (max-width: 980px) {
   .workspace,
-  .content-grid {
+  .content-grid,
+  .form-grid {
     grid-template-columns: 1fr;
   }
 
@@ -304,4 +307,84 @@ nav .active {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+}
+
+.stack {
+  display: grid;
+  gap: 10px;
+}
+
+.status,
+.empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.form-panel {
+  grid-column: 1 / -1;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.form-grid form {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfd;
+}
+
+.form-grid textarea {
+  min-height: 88px;
+}
+
+.empty {
+  position: absolute;
+  left: 18px;
+  top: 18px;
+}
+
+.lore-list strong,
+.lore-list span {
+  display: block;
+}
+
+.lore-list span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.report {
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.report p,
+.report ul {
+  margin: 0;
+}
+
+.report strong {
+  color: var(--ink);
 }
