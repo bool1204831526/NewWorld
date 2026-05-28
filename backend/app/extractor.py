@@ -226,6 +226,8 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
         headers={
             "Authorization": f"Bearer {config.api_key}",
             "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "NewWorld/0.1 OpenAI-Compatible-Client",
         },
         method="POST",
     )
@@ -272,8 +274,9 @@ def extract_llm_error_message(error_body: str, status_code: Optional[int] = None
         pass
     if status_code == 403 and "1010" in raw_message:
         return (
-            f"{raw_message}。这通常表示 API 网关拒绝访问，请检查 API Base 是否填写为接口地址，"
-            "API Key 是否有效，以及服务商是否限制了当前 IP、代理或账号权限。"
+            f"{raw_message}。这通常表示 API 网关拒绝了当前运行环境的请求。"
+            "如果 API Base 已确认无误，请重点检查 API Key 权限、当前 IP、代理/VPN、服务商白名单，"
+            "或该服务商是否拦截 Python/本地客户端请求。"
         )
     return raw_message
 

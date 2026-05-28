@@ -238,8 +238,9 @@ def test_llm_extract_requires_config() -> None:
     response = client.post(f"/api/projects/{project['id']}/extract", json={"mode": "llm"})
     assert response.status_code == 400
     assert "LLM 抽取需要填写 API 配置" in response.json()["detail"]
+
 def test_llm_403_1010_error_has_actionable_hint() -> None:
     message = extract_llm_error_message("error code: 1010", 403)
-    assert "API Base" in message
-    assert "当前 IP" in message
+    assert "当前运行环境" in message
+    assert "Python/本地客户端" in message
 
