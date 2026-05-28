@@ -33,4 +33,5 @@ data/local/
 outputs/
 tmp/
 backend/data/
+data/
 
