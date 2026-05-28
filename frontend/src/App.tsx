@@ -50,6 +50,7 @@ export default function App() {
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
   const [busy, setBusy] = useState(false);
+  const [extracting, setExtracting] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [manualNodeName, setManualNodeName] = useState("");
@@ -398,6 +399,8 @@ export default function App() {
     setStatus("LLM 配置已删除");
   }
   function handleExtractWorld() {
+    setExtracting(true);
+    setStatus(extractMode === "llm" ? "正在调用 LLM 抽取世界，请稍等..." : "正在抽取世界...");
     runAction(async () => {
       const projectId = requireProject();
       const llmPayload = extractMode === "llm" ? {
@@ -416,8 +419,9 @@ export default function App() {
       await refreshProject(projectId);
       setReport(null);
       setStatus(`抽取完成：处理 ${result.processed_sources} 份，跳过 ${result.skipped_sources} 份；新增节点 ${result.created_nodes}，关系 ${result.created_relationships}，设定 ${result.created_lore_entries}，事件 ${result.created_timeline_events}`);
-    }, "抽取完成", true);
+    }, "抽取完成", true).finally(() => setExtracting(false));
   }
+
 
   function handleMergeSelectedNode() {
     if (!selectedNode || !mergeCandidateNode || selectedNode.id === mergeCandidateNode.id) return;
@@ -523,7 +527,13 @@ export default function App() {
                 </ul>
               </div>
             ) : null}
-            <button disabled={busy || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">抽取世界</button>
+            <button disabled={busy || extracting || !activeProjectId || sources.length === 0} onClick={handleExtractWorld} type="button">{extracting ? "抽取中..." : "抽取世界"}</button>
+            {extracting ? (
+              <div className="extract-progress" role="status" aria-live="polite">
+                <div className="extract-progress-bar"><span /></div>
+                <p>{extractMode === "llm" ? "LLM 正在阅读资料并生成节点、关系、设定和时间线。" : "正在根据资料抽取节点、关系、设定和时间线。"}</p>
+              </div>
+            ) : null}
           </div>
           <p className="status">{sources.length} 份来源资料 · {sources.filter((source) => !source.extracted_at).length} 份待抽取 · 已选择 {selectedSourceIds.length || "全部待抽取"}</p>
           <ul className="source-list">

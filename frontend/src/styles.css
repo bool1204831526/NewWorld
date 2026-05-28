@@ -659,4 +659,48 @@ button.subtle {
   padding: 10px;
   background: #fff;
 }
+.extract-progress {
+  display: grid;
+  gap: 6px;
+  border: 1px solid #b8c7d6;
+  border-radius: 7px;
+  padding: 9px;
+  background: #f2f7fc;
+}
+
+.extract-progress p {
+  margin: 0;
+  color: var(--blue);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.extract-progress-bar {
+  position: relative;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #d7e2ed;
+}
+
+.extract-progress-bar span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--green));
+  animation: extract-progress-slide 1.15s ease-in-out infinite;
+}
+
+@keyframes extract-progress-slide {
+  0% {
+    transform: translateX(-105%);
+  }
+  50% {
+    transform: translateX(80%);
+  }
+  100% {
+    transform: translateX(245%);
+  }
+}
 
