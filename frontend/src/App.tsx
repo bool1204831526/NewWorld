@@ -15,6 +15,7 @@ export default function App() {
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
   const [busy, setBusy] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState("");
 
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const relationshipLabels = useMemo(() => {
@@ -25,6 +26,47 @@ export default function App() {
       targetName: byId.get(relationship.target_node_id) ?? relationship.target_node_id,
     }));
   }, [graph]);
+
+  const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0];
+  const selectedRelationships = useMemo(() => {
+    if (!selectedNode) return [];
+    return relationshipLabels.filter((relationship) =>
+      relationship.source_node_id === selectedNode.id || relationship.target_node_id === selectedNode.id,
+    );
+  }, [relationshipLabels, selectedNode]);
+  const graphLayout = useMemo(() => {
+    const width = 900;
+    const height = 520;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const radiusX = Math.max(190, Math.min(340, 96 + graph.nodes.length * 18));
+    const radiusY = Math.max(140, Math.min(210, 82 + graph.nodes.length * 10));
+    const degree = new Map(graph.nodes.map((node) => [node.id, 0]));
+    graph.relationships.forEach((relationship) => {
+      degree.set(relationship.source_node_id, (degree.get(relationship.source_node_id) ?? 0) + 1);
+      degree.set(relationship.target_node_id, (degree.get(relationship.target_node_id) ?? 0) + 1);
+    });
+    const nodes = graph.nodes.map((node, index) => {
+      const angle = graph.nodes.length <= 1 ? 0 : (Math.PI * 2 * index) / graph.nodes.length - Math.PI / 2;
+      const connected = degree.get(node.id) ?? 0;
+      const radialBias = connected > 1 ? 0.88 : 1;
+      return {
+        ...node,
+        connected,
+        x: centerX + Math.cos(angle) * radiusX * radialBias,
+        y: centerY + Math.sin(angle) * radiusY * radialBias,
+      };
+    });
+    const byId = new Map(nodes.map((node) => [node.id, node]));
+    const edges = relationshipLabels
+      .map((relationship) => ({
+        ...relationship,
+        source: byId.get(relationship.source_node_id),
+        target: byId.get(relationship.target_node_id),
+      }))
+      .filter((edge) => edge.source && edge.target);
+    return { width, height, nodes, edges };
+  }, [graph.nodes, graph.relationships, relationshipLabels]);
 
   async function refreshProject(projectId: string) {
     const [nextSources, nextGraph, nextEvents, nextLore] = await Promise.all([
@@ -50,6 +92,10 @@ export default function App() {
   useEffect(() => {
     loadProjects().catch((error) => setStatus(error.message));
   }, []);
+
+  useEffect(() => {
+    setSelectedNodeId((current) => graph.nodes.some((node) => node.id === current) ? current : graph.nodes[0]?.id ?? "");
+  }, [graph.nodes]);
 
   async function runAction(action: () => Promise<void>, doneMessage: string) {
     setBusy(true);
@@ -289,11 +335,58 @@ export default function App() {
 
           <section className="panel graph-panel">
             <div className="section-head"><h2>重要节点地图</h2><span>{graph.nodes.length} 个节点 · {graph.relationships.length} 条关系</span></div>
-            <div className="graph">
-              {graph.nodes.length === 0 ? <p className="empty">先创建项目，再添加节点。</p> : graph.nodes.map((node, index) => (
-                <article className={`node node-${(index % 4) + 1}`} key={node.id}><strong>{node.name}</strong><span>{node.type}</span></article>
-              ))}
-              {relationshipLabels.map((relationship) => <p className="relation" key={relationship.id}>{relationship.sourceName} <span>{relationship.type}</span> {relationship.targetName}</p>)}
+            <div className="graph-workbench">
+              <div className="graph-canvas" aria-label="节点关系网络">
+                {graph.nodes.length === 0 ? <p className="empty">先创建项目，再添加节点。</p> : (
+                  <svg viewBox={`0 0 ${graphLayout.width} ${graphLayout.height}`} role="img">
+                    <defs>
+                      <marker id="arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+                        <path d="M0,0 L8,4 L0,8 Z" />
+                      </marker>
+                    </defs>
+                    {graphLayout.edges.map((edge) => {
+                      const selected = selectedNode && (edge.source_node_id === selectedNode.id || edge.target_node_id === selectedNode.id);
+                      const midX = ((edge.source?.x ?? 0) + (edge.target?.x ?? 0)) / 2;
+                      const midY = ((edge.source?.y ?? 0) + (edge.target?.y ?? 0)) / 2;
+                      return (
+                        <g className={selected ? "edge selected" : "edge"} key={edge.id}>
+                          <line markerEnd="url(#arrow)" x1={edge.source?.x} x2={edge.target?.x} y1={edge.source?.y} y2={edge.target?.y} />
+                          <text x={midX} y={midY}>{edge.type}</text>
+                        </g>
+                      );
+                    })}
+                    {graphLayout.nodes.map((node) => {
+                      const selected = selectedNode?.id === node.id;
+                      const related = selectedNode && selectedRelationships.some((relationship) => relationship.source_node_id === node.id || relationship.target_node_id === node.id);
+                      return (
+                        <g className={selected ? "graph-node selected" : related ? "graph-node related" : "graph-node"} key={node.id} onClick={() => setSelectedNodeId(node.id)} role="button" tabIndex={0}>
+                          <circle cx={node.x} cy={node.y} r={Math.min(34, 20 + node.connected * 3)} />
+                          <text x={node.x} y={node.y + 4}>{node.name}</text>
+                          <text className="node-type" x={node.x} y={node.y + 24}>{node.type}</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                )}
+              </div>
+              <aside className="node-inspector">
+                {selectedNode ? (
+                  <>
+                    <span>{selectedNode.type}</span>
+                    <h3>{selectedNode.name}</h3>
+                    <p>{selectedNode.summary || selectedNode.current_state || "暂无节点简介"}</p>
+                    <strong>关联关系</strong>
+                    <ul>
+                      {selectedRelationships.length === 0 ? <li>暂无直接关系</li> : selectedRelationships.map((relationship) => (
+                        <li key={relationship.id}>
+                          <b>{relationship.sourceName}</b><em>{relationship.type}</em><b>{relationship.targetName}</b>
+                          {relationship.summary ? <p>{relationship.summary}</p> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : <p>选择一个节点查看信息。</p>}
+              </aside>
             </div>
           </section>
 
@@ -318,6 +411,10 @@ export default function App() {
     </main>
   );
 }
+
+
+
+
 
 
 
