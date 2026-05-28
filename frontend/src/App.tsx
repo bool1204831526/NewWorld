@@ -413,11 +413,16 @@ export default function App() {
                 )}
               </div>
               <aside className="node-inspector">
+                <div className="inspector-title">
+                  <strong>节点详情</strong>
+                  <span>{selectedRelationships.length} 条直接关系</span>
+                </div>
                 {selectedNode ? (
                   <>
                     <span>{selectedNode.type}</span>
                     <h3>{selectedNode.name}</h3>
                     <p>{selectedNode.summary || selectedNode.current_state || "暂无节点简介"}</p>
+                    <button className="danger" disabled={busy} onClick={handleDeleteSelectedNode} type="button">删除节点</button>
                     <strong>关联关系</strong>
                     <ul>
                       {selectedRelationships.length === 0 ? <li>暂无直接关系</li> : selectedRelationships.map((relationship) => (
@@ -428,7 +433,7 @@ export default function App() {
                       ))}
                     </ul>
                   </>
-                ) : <p>选择一个节点查看信息。</p>}
+                ) : <p>点击图谱中的节点查看信息。</p>}
               </aside>
             </div>
           </section>
@@ -454,6 +459,7 @@ export default function App() {
     </main>
   );
 }
+
 
 
 
