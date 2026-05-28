@@ -234,7 +234,7 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
             response_text = response.read().decode("utf-8")
     except urllib.error.HTTPError as error:
         error_body = error.read().decode("utf-8", errors="ignore")
-        raise ValueError(f"LLM 接口返回 HTTP {error.code}：{extract_llm_error_message(error_body)}")
+        raise ValueError(f"LLM 接口返回 HTTP {error.code}：{extract_llm_error_message(error_body, error.code)}")
     except urllib.error.URLError as error:
         raise ValueError(f"无法连接 LLM 接口：{error.reason}")
     except TimeoutError:
@@ -256,19 +256,26 @@ def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:
     return parsed
 
 
-def extract_llm_error_message(error_body: str) -> str:
+def extract_llm_error_message(error_body: str, status_code: Optional[int] = None) -> str:
     if not error_body:
         return "无响应内容"
+    raw_message = error_body[:500]
     try:
         data = json.loads(error_body)
         if isinstance(data, dict):
             error = data.get("error")
             if isinstance(error, dict):
-                return str(error.get("message") or error)
-            return str(data.get("message") or data)
+                raw_message = str(error.get("message") or error)
+            else:
+                raw_message = str(data.get("message") or data)
     except json.JSONDecodeError:
         pass
-    return error_body[:500]
+    if status_code == 403 and "1010" in raw_message:
+        return (
+            f"{raw_message}。这通常表示 API 网关拒绝访问，请检查 API Base 是否填写为接口地址，"
+            "API Key 是否有效，以及服务商是否限制了当前 IP、代理或账号权限。"
+        )
+    return raw_message
 
 
 def strip_json_code_fence(content: str) -> str:

@@ -5,6 +5,7 @@ os.environ["NEWWORLD_DB_PATH"] = os.path.join(tempfile.gettempdir(), "newworld_t
 
 from fastapi.testclient import TestClient
 
+from app.extractor import extract_llm_error_message
 from app.main import app
 from app.storage import store
 
@@ -237,4 +238,8 @@ def test_llm_extract_requires_config() -> None:
     response = client.post(f"/api/projects/{project['id']}/extract", json={"mode": "llm"})
     assert response.status_code == 400
     assert "LLM 抽取需要填写 API 配置" in response.json()["detail"]
+def test_llm_403_1010_error_has_actionable_hint() -> None:
+    message = extract_llm_error_message("error code: 1010", 403)
+    assert "API Base" in message
+    assert "当前 IP" in message
 
