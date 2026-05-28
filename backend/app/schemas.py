@@ -85,6 +85,10 @@ class Node(BaseModel):
             summary=summary,
         )
 
+class MergeNodeRequest(BaseModel):
+    source_node_id: str
+
+
 class CreateRelationshipRequest(BaseModel):
     source_node_id: str
     target_node_id: str
@@ -211,5 +215,4 @@ class ExtractionResult(BaseModel):
     created_timeline_events: int
     processed_sources: int
     skipped_sources: int
-
 

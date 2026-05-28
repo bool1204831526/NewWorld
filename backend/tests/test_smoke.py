@@ -262,4 +262,49 @@ def test_llm_api_base_rejects_non_ascii_url() -> None:
         assert "中文" in str(error)
     else:
         raise AssertionError("expected invalid API base to raise")
+def test_merge_node_rewrites_relationships_and_timeline() -> None:
+    project_response = client.post("/api/projects", json={"name": "节点合并测试"})
+    project = project_response.json()
+    target = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "林曜", "type": "人物", "summary": "北境少年。"},
+    ).json()
+    duplicate = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "林耀", "type": "人物", "summary": "同一角色的误写。"},
+    ).json()
+    other = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "王印", "type": "物品", "summary": "继承凭证。"},
+    ).json()
+    client.post(
+        f"/api/projects/{project['id']}/relationships",
+        json={"source_node_id": duplicate["id"], "target_node_id": other["id"], "type": "追寻", "summary": "寻找王印。"},
+    )
+    client.post(
+        f"/api/projects/{project['id']}/relationships",
+        json={"source_node_id": target["id"], "target_node_id": duplicate["id"], "type": "同一人", "summary": "误抽成两个节点。"},
+    )
+    client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "出发", "time_label": "第一章", "time_order": 1, "description": "林耀出发。", "participant_node_ids": [duplicate["id"]]},
+    )
+
+    response = client.post(
+        f"/api/projects/{project['id']}/nodes/{target['id']}/merge",
+        json={"source_node_id": duplicate["id"]},
+    )
+    assert response.status_code == 200
+    merged = response.json()
+    assert "林耀" in merged["aliases"]
+    assert "误写" in merged["summary"]
+
+    graph = client.get(f"/api/projects/{project['id']}/graph").json()
+    assert {node["id"] for node in graph["nodes"]} == {target["id"], other["id"]}
+    assert all(relationship["source_node_id"] != duplicate["id"] for relationship in graph["relationships"])
+    assert all(relationship["target_node_id"] != duplicate["id"] for relationship in graph["relationships"])
+    assert any(relationship["source_node_id"] == target["id"] and relationship["target_node_id"] == other["id"] for relationship in graph["relationships"])
+
+    timeline = client.get(f"/api/projects/{project['id']}/timeline").json()
+    assert timeline[0]["participant_node_ids"] == [target["id"]]
 

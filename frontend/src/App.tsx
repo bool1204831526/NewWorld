@@ -59,6 +59,7 @@ export default function App() {
   const [relationshipSourceQuery, setRelationshipSourceQuery] = useState("");
   const [relationshipTargetQuery, setRelationshipTargetQuery] = useState("");
   const [graphNodeQuery, setGraphNodeQuery] = useState("");
+  const [mergeNodeQuery, setMergeNodeQuery] = useState("");
   const [llmProfileLabel, setLlmProfileLabel] = useState("");
   const [llmProfiles, setLlmProfiles] = useState<LLMProfile[]>(() => loadLLMProfiles());
 
@@ -76,6 +77,7 @@ export default function App() {
   const selectedNode = graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes[0];
   const relationshipSourceNode = findNodeBySearchValue(relationshipSourceQuery);
   const relationshipTargetNode = findNodeBySearchValue(relationshipTargetQuery);
+  const mergeCandidateNode = findNodeBySearchValue(mergeNodeQuery);
   const selectedRelationships = useMemo(() => {
     if (!selectedNode) return [];
     return relationshipLabels.filter((relationship) =>
@@ -408,6 +410,21 @@ export default function App() {
     }, "抽取完成", true);
   }
 
+  function handleMergeSelectedNode() {
+    if (!selectedNode || !mergeCandidateNode || selectedNode.id === mergeCandidateNode.id) return;
+    const confirmed = window.confirm(`将“${mergeCandidateNode.name}”合并到“${selectedNode.name}”？被合并节点会删除，相关关系会转移。`);
+    if (!confirmed) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      const merged = await api.mergeNode(projectId, selectedNode.id, mergeCandidateNode.id);
+      await refreshProject(projectId);
+      setSelectedNodeId(merged.id);
+      setGraphNodeQuery(`${merged.name} · ${merged.type}`);
+      setMergeNodeQuery("");
+    }, "节点已合并", true);
+  }
+
+
   function handleDeleteSelectedNode() {
     if (!selectedNode) return;
     const confirmed = window.confirm(`删除节点“${selectedNode.name}”？与它相连的关系也会一并删除。`);
@@ -613,6 +630,11 @@ export default function App() {
                     <span>{selectedNode.type}</span>
                     <h3>{selectedNode.name}</h3>
                     <p>{selectedNode.summary || selectedNode.current_state || "暂无节点简介"}</p>
+                    <div className="merge-node-box">
+                      <input list="mergeNodeOptions" onChange={(event) => setMergeNodeQuery(event.target.value)} placeholder="搜索要合并进来的重复节点" value={mergeNodeQuery} />
+                      <datalist id="mergeNodeOptions">{nodeSearchOptions.filter((option) => !option.startsWith(`${selectedNode.name} ·`)).map((option) => <option key={option} value={option} />)}</datalist>
+                      <button disabled={busy || !mergeCandidateNode || mergeCandidateNode.id === selectedNode.id} onClick={handleMergeSelectedNode} type="button">合并到当前节点</button>
+                    </div>
                     <button className="danger" disabled={busy} onClick={handleDeleteSelectedNode} type="button">删除节点</button>
                     <strong>关联关系</strong>
                     <ul>

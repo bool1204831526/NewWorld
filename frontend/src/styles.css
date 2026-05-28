@@ -651,4 +651,12 @@ button.subtle {
 .graph-search-row button {
   white-space: nowrap;
 }
+.merge-node-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 10px;
+  background: #fff;
+}
 

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 from typing import List
@@ -16,6 +16,7 @@ from app.schemas import (
     ExtractionResult,
     GraphResponse,
     LoreEntry,
+    MergeNodeRequest,
     Node,
     PredictionReport,
     Project,
@@ -162,6 +163,17 @@ def add_node(project_id: str, payload: CreateNodeRequest) -> Node:
     )
     return store.save_node(node)
 
+
+
+@router.post("/projects/{project_id}/nodes/{target_node_id}/merge")
+def merge_node(project_id: str, target_node_id: str, payload: MergeNodeRequest) -> Node:
+    ensure_project(project_id)
+    if target_node_id == payload.source_node_id:
+        raise HTTPException(status_code=400, detail="不能合并同一个节点")
+    merged = store.merge_node(project_id, target_node_id, payload.source_node_id)
+    if not merged:
+        raise HTTPException(status_code=404, detail="待合并节点不存在")
+    return merged
 
 @router.delete("/projects/{project_id}/nodes/{node_id}")
 def delete_node(project_id: str, node_id: str) -> dict:

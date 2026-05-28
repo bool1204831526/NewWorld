@@ -133,6 +133,8 @@ export const api = {
     request<ExtractionResult>(`/projects/${projectId}/extract`, { method: "POST", body: JSON.stringify(payload) }),
   addNode: (projectId: string, payload: { name: string; type: string; summary: string }) =>
     request<NodeItem>(`/projects/${projectId}/nodes`, { method: "POST", body: JSON.stringify(payload) }),
+  mergeNode: (projectId: string, targetNodeId: string, sourceNodeId: string) =>
+    request<NodeItem>(`/projects/${projectId}/nodes/${targetNodeId}/merge`, { method: "POST", body: JSON.stringify({ source_node_id: sourceNodeId }) }),
   deleteNode: (projectId: string, nodeId: string) =>
     request<{ deleted: boolean; node_id: string }>(`/projects/${projectId}/nodes/${nodeId}`, { method: "DELETE" }),
   addRelationship: (
@@ -147,6 +149,4 @@ export const api = {
   createPrediction: (projectId: string) =>
     request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
 };
-
-
 

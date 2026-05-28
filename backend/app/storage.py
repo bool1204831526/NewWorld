@@ -148,7 +148,10 @@ class SQLiteStore:
     def save_node(self, node: Node) -> Node:
         with self.connect() as connection:
             connection.execute(
-                "INSERT INTO nodes (id, project_id, data) VALUES (?, ?, ?)",
+                """
+                INSERT INTO nodes (id, project_id, data) VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET data = excluded.data
+                """,
                 (node.id, node.project_id, serialize(node)),
             )
         return node
@@ -173,6 +176,84 @@ class SQLiteStore:
             )
             connection.execute("DELETE FROM nodes WHERE id = ? AND project_id = ?", (node_id, project_id))
         return True
+
+    def merge_node(self, project_id: str, target_node_id: str, source_node_id: str) -> Optional[Node]:
+        if target_node_id == source_node_id:
+            return None
+        target = self.get_node(target_node_id)
+        source = self.get_node(source_node_id)
+        if not target or not source or target.project_id != project_id or source.project_id != project_id:
+            return None
+
+        aliases = list(dict.fromkeys([*target.aliases, source.name, *source.aliases]))
+        tags = list(dict.fromkeys([*target.tags, *source.tags]))
+        source_refs = list(dict.fromkeys([*target.source_refs, *source.source_refs]))
+        summaries = [part for part in [target.summary.strip(), source.summary.strip()] if part]
+        target.aliases = aliases
+        target.tags = tags
+        target.source_refs = source_refs
+        target.summary = "\n".join(dict.fromkeys(summaries))
+        target.importance = max(target.importance, source.importance)
+        target.confidence = max(target.confidence, source.confidence)
+        if not target.current_state and source.current_state:
+            target.current_state = source.current_state
+
+        relationships = self.list_relationships(project_id)
+        rebuilt_relationships: List[Relationship] = []
+        seen_keys = set()
+        for relationship in relationships:
+            if relationship.source_node_id == source_node_id:
+                relationship.source_node_id = target_node_id
+            if relationship.target_node_id == source_node_id:
+                relationship.target_node_id = target_node_id
+            if relationship.source_node_id == relationship.target_node_id:
+                continue
+            key = (relationship.source_node_id, relationship.target_node_id, relationship.type)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            rebuilt_relationships.append(relationship)
+
+        events = self.list_timeline_events(project_id)
+        for event in events:
+            if source_node_id in event.participant_node_ids:
+                event.participant_node_ids = [target_node_id if node_id == source_node_id else node_id for node_id in event.participant_node_ids]
+                event.participant_node_ids = list(dict.fromkeys(event.participant_node_ids))
+
+        with self.connect() as connection:
+            connection.execute("DELETE FROM relationships WHERE project_id = ?", (project_id,))
+            for relationship in rebuilt_relationships:
+                connection.execute(
+                    """
+                    INSERT INTO relationships (id, project_id, source_node_id, target_node_id, data)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        relationship.id,
+                        relationship.project_id,
+                        relationship.source_node_id,
+                        relationship.target_node_id,
+                        serialize(relationship),
+                    ),
+                )
+            connection.execute("DELETE FROM nodes WHERE id = ? AND project_id = ?", (source_node_id, project_id))
+            connection.execute(
+                """
+                INSERT INTO nodes (id, project_id, data) VALUES (?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET data = excluded.data
+                """,
+                (target.id, target.project_id, serialize(target)),
+            )
+            for event in events:
+                connection.execute(
+                    """
+                    INSERT INTO timeline_events (id, project_id, time_order, data) VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET time_order = excluded.time_order, data = excluded.data
+                    """,
+                    (event.id, event.project_id, event.time_order, serialize(event)),
+                )
+        return target
+
 
     def save_relationship(self, relationship: Relationship) -> Relationship:
         with self.connect() as connection:
@@ -241,6 +322,4 @@ def parse_many(model: Type[T], rows: Sequence[sqlite3.Row]) -> List[T]:
     return [parse_one(model, row["data"]) for row in rows]
 
 store = SQLiteStore()
-
-
 
