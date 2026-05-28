@@ -1,25 +1,27 @@
-# NewWorld
+﻿# NewWorld
 
-NewWorld is an early-stage project for building a flexible multi-agent scenario simulator.
+NewWorld 是一个早期阶段的多智能体情景模拟项目。
 
-The goal is to let a user provide source material, generate actors and relationships, run interactions between agents, and inspect how narratives, opinions, or decisions may evolve over time.
+它的目标是让用户提供资料，系统生成参与者、关系、动机与冲突，让智能体在一个小世界中互动，并帮助用户观察叙事、舆论、风险或决策可能怎样演化。
 
-## Current Stage
+## 当前阶段
 
-Project foundation only:
+项目地基已完成：
 
-- Git repository initialized
-- Basic `.gitignore`
-- Initial README
+- Git 仓库已初始化
+- 基础 `.gitignore`
+- 中文 README
+- 中文架构设计书
+- NewWorld 项目专用 Codex skill
 
-## Planned Direction
+## 规划方向
 
-- Ingest text, reports, links, or structured notes
-- Extract entities, relationships, incentives, and conflicts
-- Generate agent personas with goals and memory
-- Simulate multi-round interactions in a shared environment
-- Produce visual maps, feeds, scenario reports, and comparison runs
+- 输入文本、报告、链接或结构化笔记
+- 抽取实体、关系、动机与冲突
+- 生成带目标、信念、限制和记忆的智能体
+- 在共享环境中进行多回合互动模拟
+- 输出关系图、信息流、情景报告和运行对比
 
-## Development
+## 开发
 
-The technical stack is not fixed yet. The next step is to choose the MVP architecture and create the first runnable skeleton.
+技术栈初步建议为 React + TypeScript + Vite 前端，以及 Python FastAPI 后端。下一步是创建第一个可运行的前后端骨架。

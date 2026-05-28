@@ -1,108 +1,108 @@
-# NewWorld Architecture Design
+﻿# NewWorld 架构设计书
 
-## 1. Product Positioning
+## 1. 产品定位
 
-NewWorld is a flexible multi-agent scenario simulator. It helps users place source material into a small world, generate actors and relationships, run interactions, and compare how opinions, narratives, risks, or decisions evolve.
+NewWorld 是一个灵活、有趣的多智能体情景模拟工具。用户把一段材料、一个事件或一个设定放进来，系统生成参与者、关系、动机与冲突，让这些角色在一个小世界里互动，最后帮助用户观察舆论、叙事、风险或决策可能怎样演化。
 
-The product should feel closer to a playful analysis lab than an academic modeling tool. It should be useful for:
+它不应该像严肃学术建模工具，而应该像一个好玩的分析实验室。适用场景包括：
 
-- policy and public opinion reaction rehearsal
-- market and competitor scenario exploration
-- story world and character dynamics simulation
-- community, forum, or social media narrative testing
-- decision tabletop exercises
+- 政策、公共事件或舆论反应预演
+- 市场、竞品、品牌事件情景推演
+- 小说、游戏、剧本里的角色动态模拟
+- 社区、论坛、社交媒体话题走向测试
+- 团队决策、危机处理、桌面推演
 
-## 2. MVP Goal
+## 2. MVP 目标
 
-The first useful version should answer one question:
+第一个可用版本要回答一个核心问题：
 
-> Given source material and a scenario prompt, what actors appear, what do they want, how might they interact, and what outcomes are plausible?
+> 给定一批资料和一个情景问题，里面有哪些关键角色，他们想要什么，他们会怎样互动，可能出现哪些结果？
 
-The MVP should include:
+MVP 应包含：
 
-- document or pasted text input
-- entity, relationship, and conflict extraction
-- agent generation from extracted actors
-- round-based interaction simulation
-- visual actor map
-- live interaction feed
-- final scenario report
-- saved simulation runs
+- 文档或粘贴文本输入
+- 实体、关系、冲突抽取
+- 基于实体生成智能体
+- 按回合推进的互动模拟
+- 可视化角色关系图
+- 实时互动信息流
+- 最终情景报告
+- 可保存的模拟运行记录
 
-## 3. Core Concepts
+## 3. 核心概念
 
-### World
+### World / 世界
 
-A world is the simulation container. It stores the scenario, source materials, extracted ontology, agents, environment rules, and run history.
+一次情景模拟的容器。它保存情景描述、输入资料、抽取结果、智能体、环境规则和运行历史。
 
-### Source
+### Source / 来源
 
-A source is any input material: pasted text, markdown, PDF text extraction, URL snapshot, notes, or structured JSON.
+用户提供的输入材料，例如粘贴文本、Markdown、PDF 提取文本、网页快照、笔记或结构化 JSON。
 
-### Entity
+### Entity / 实体
 
-An entity is a named object extracted from sources: person, organization, place, policy, product, event, metric, community, or abstract concept.
+从资料中抽取出的命名对象，可以是人物、组织、地点、政策、产品、事件、指标、社区或抽象概念。
 
-### Relationship
+### Relationship / 关系
 
-A relationship links entities with a typed edge such as supports, opposes, funds, regulates, competes with, depends on, influences, or mentions.
+实体之间的有类型连接，例如支持、反对、资助、监管、竞争、依赖、影响、提及。
 
-### Agent
+### Agent / 智能体
 
-An agent is an active participant derived from entities or created manually. It has goals, beliefs, constraints, memory, tone, influence, and decision rules.
+模拟中的主动参与者，可以从实体生成，也可以由用户手动创建。它拥有目标、信念、限制、记忆、表达风格、影响力和决策规则。
 
-### Environment
+### Environment / 环境
 
-The environment is where agents interact. Early versions can use a shared feed. Later versions may support channels, news events, markets, polls, and private messages.
+智能体互动发生的地方。早期版本可以是一个共享信息流；后续可以扩展为频道、新闻事件、市场指标、投票、私信等。
 
-### Run
+### Run / 运行
 
-A run is one execution of a scenario. It records configuration, messages, state transitions, metrics, and the final report.
+一次具体的模拟执行。它记录配置、消息、状态变化、指标和最终报告。
 
-## 4. System Architecture
+## 4. 系统架构
 
-Recommended starting stack:
+建议初始技术栈：
 
-- Frontend: React + TypeScript + Vite
-- Backend API: Python FastAPI
-- Database: SQLite for local MVP, PostgreSQL later
-- ORM: SQLModel or SQLAlchemy
-- Task execution: simple in-process worker first, queue later
-- LLM provider: adapter interface, OpenAI first, local models later
-- Visualization: React Flow or Cytoscape for graph, simple feed components for interactions
+- 前端：React + TypeScript + Vite
+- 后端 API：Python FastAPI
+- 数据库：本地 MVP 使用 SQLite，后续迁移 PostgreSQL
+- ORM：SQLModel 或 SQLAlchemy
+- 任务执行：早期使用进程内任务，后续再引入队列
+- LLM 接入：使用模型适配器接口，先支持 OpenAI，后续支持本地模型
+- 可视化：关系图使用 React Flow 或 Cytoscape，互动流使用普通组件
 
-High-level modules:
+高层模块：
 
 ```text
 frontend/
-  app shell, world editor, graph view, feed view, report view
+  应用外壳、世界编辑器、关系图视图、信息流视图、报告视图
 
 backend/
-  api routes, application services, simulation engine, provider adapters
+  API 路由、应用服务、模拟引擎、模型适配器
 
 storage/
-  database models, migrations, repository layer
+  数据模型、迁移、仓储层
 
 engine/
-  extraction, agent generation, simulation loop, report generation
+  抽取、智能体生成、模拟循环、报告生成
 
 docs/
-  architecture, product notes, API notes
+  架构、产品说明、API 说明
 ```
 
-## 5. Backend Module Design
+## 5. 后端模块设计
 
-### API Layer
+### API 层
 
-Responsibilities:
+职责：
 
-- accept sources and scenario prompts
-- create and update worlds
-- start simulation runs
-- stream or poll run progress
-- return graph, feed, metrics, and reports
+- 接收资料和情景提示词
+- 创建和更新世界
+- 启动模拟运行
+- 流式返回或轮询运行进度
+- 返回关系图、信息流、指标和报告
 
-Initial endpoints:
+初始接口：
 
 - `POST /worlds`
 - `GET /worlds`
@@ -114,104 +114,104 @@ Initial endpoints:
 - `GET /runs/{run_id}`
 - `GET /runs/{run_id}/events`
 
-### Extraction Service
+### 抽取服务
 
-Input:
+输入：
 
-- source text
-- optional user focus
-- extraction schema version
+- 来源文本
+- 可选的用户关注点
+- 抽取 schema 版本
 
-Output:
+输出：
 
-- entities
-- relationships
-- claims
-- uncertainties
-- source citations
+- 实体
+- 关系
+- 主张
+- 不确定点
+- 来源引用
 
-MVP can start with LLM JSON extraction and schema validation. Use deterministic fallback heuristics only for demos and tests.
+MVP 可以先使用 LLM 输出 JSON，再进行 schema 校验。规则启发式抽取只作为演示和测试的兜底，不作为主路径。
 
-### Agent Service
+### 智能体服务
 
-Creates agents from entities and user edits.
+从实体和用户编辑内容创建智能体。
 
-Agent fields:
+智能体字段：
 
-- name
-- represented entity
-- role
-- goals
-- beliefs
-- constraints
-- stance
-- influence
-- communication style
-- memory summary
+- 名称
+- 代表的实体
+- 角色
+- 目标
+- 信念
+- 限制
+- 立场
+- 影响力
+- 表达风格
+- 记忆摘要
 
-### Simulation Engine
+### 模拟引擎
 
-The simulation loop should be explicit and inspectable:
+模拟循环必须清晰、可检查、可复放：
 
-1. Build round context from world state.
-2. Select active agents.
-3. Generate each agent action.
-4. Apply environment effects.
-5. Update memories and metrics.
-6. Store events.
-7. Stop when rounds finish or convergence occurs.
+1. 根据世界状态构建当前回合上下文。
+2. 选择本回合活跃智能体。
+3. 生成每个智能体的行动。
+4. 应用环境反馈。
+5. 更新记忆和指标。
+6. 存储事件。
+7. 回合结束或达到收敛条件后停止。
 
-Initial action types:
+初始行动类型：
 
-- post
-- reply
-- amplify
-- challenge
-- ask_for_evidence
-- form_alliance
-- change_stance
+- post / 发帖
+- reply / 回复
+- amplify / 放大
+- challenge / 质疑
+- ask_for_evidence / 要求证据
+- form_alliance / 结盟
+- change_stance / 改变立场
 
-### Report Service
+### 报告服务
 
-Produces:
+输出：
 
-- outcome forecast
-- strongest narratives
-- stakeholder shifts
-- conflict points
-- uncertainty drivers
-- recommended next scenarios
-- citations to source and run events
+- 结果预测
+- 最强叙事
+- 关键角色变化
+- 冲突点
+- 不确定性驱动因素
+- 推荐的下一轮情景
+- 对来源和运行事件的引用
 
-## 6. Frontend Experience
+## 6. 前端体验
 
-The first screen should be the actual workspace, not a marketing page.
+第一屏应该是实际工作台，而不是营销页。
 
-Primary layout:
+主布局：
 
-- left sidebar: worlds, sources, run controls
-- center: graph and feed tabs
-- right panel: selected entity or agent details
-- bottom or separate tab: report and comparisons
+- 左侧：世界列表、资料、运行控制
+- 中间：关系图和信息流标签页
+- 右侧：选中实体或智能体详情
+- 底部或独立标签页：报告和运行对比
 
-Important interactions:
+关键操作：
 
-- paste source material
-- run extraction
-- inspect and edit entities
-- inspect and edit agents
-- start simulation
-- watch feed update
-- open final report
-- duplicate a run with a changed assumption
+- 粘贴资料
+- 运行抽取
+- 查看和编辑实体
+- 查看和编辑智能体
+- 启动模拟
+- 观察信息流更新
+- 打开最终报告
+- 修改一个假设并复制运行
 
-Visual tone:
+视觉和文案风格：
 
-- simple, lively, and clear
-- avoid overly academic wording
-- use familiar labels such as World, People, Feed, Map, Runs, Report
+- 简单、活泼、清楚
+- 避免过度学术化
+- 使用熟悉词汇，例如 World、People、Feed、Map、Runs、Report，或中文界面中的世界、人物、信息流、地图、运行、报告
 
-## 7. Data Model Draft
+## 7. 数据模型草案
 
 ```text
 World
@@ -239,11 +239,11 @@ Report
   id, run_id, summary, sections, citations, created_at
 ```
 
-## 8. LLM Adapter Design
+## 8. LLM 适配器设计
 
-Use provider adapters so the app is not locked to one model.
+使用模型适配器，避免应用被某个模型供应商绑定。
 
-Core interface:
+核心接口：
 
 ```text
 generate_json(task, schema, messages, temperature)
@@ -251,19 +251,19 @@ generate_text(task, messages, temperature)
 embed(texts)
 ```
 
-Provider implementations:
+适配器实现：
 
-- OpenAI adapter
-- local model adapter
-- mock adapter for tests
+- OpenAI 适配器
+- 本地模型适配器
+- 测试用 mock 适配器
 
-All model outputs must be validated before entering storage.
+所有模型输出进入存储前都必须经过校验。
 
-## 9. Prompting Boundaries
+## 9. Prompt 边界
 
-Prompts should be versioned and treated as product code.
+Prompt 应该版本化，并被当作产品代码维护。
 
-Suggested prompt files:
+建议 prompt 文件：
 
 ```text
 backend/prompts/extract_world.md
@@ -272,86 +272,86 @@ backend/prompts/agent_turn.md
 backend/prompts/summarize_run.md
 ```
 
-Each prompt should define:
+每个 prompt 应定义：
 
-- task
-- input contract
-- output schema
-- constraints
-- examples only when needed
+- 任务
+- 输入契约
+- 输出 schema
+- 约束
+- 只在必要时加入示例
 
-## 10. Development Phases
+## 10. 开发阶段
 
-### Phase 0: Foundation
+### Phase 0：地基
 
-- repo initialized
-- architecture document
-- project skill
-- basic project skeleton
+- 初始化仓库
+- 架构设计书
+- 项目专用 skill
+- 基础项目骨架
 
-### Phase 1: Local MVP
+### Phase 1：本地 MVP
 
-- FastAPI backend
-- React workspace
-- SQLite persistence
-- pasted text input
-- LLM-backed extraction
-- simple agent generation
-- round simulation
-- report generation
+- FastAPI 后端
+- React 工作台
+- SQLite 持久化
+- 粘贴文本输入
+- LLM 抽取
+- 简单智能体生成
+- 回合模拟
+- 报告生成
 
-### Phase 2: Better Worlds
+### Phase 2：更好用的世界
 
-- editable graph
-- saved runs
-- comparison view
-- source citations
-- prompt/version tracking
-- streaming progress
+- 可编辑关系图
+- 保存运行
+- 运行对比
+- 来源引用
+- prompt 和版本追踪
+- 流式进度
 
-### Phase 3: Rich Simulation
+### Phase 3：更丰富的模拟
 
-- private channels
-- event injection
-- metrics and polls
-- memory evolution
-- scenario branching
-- batch experiments
+- 私密频道
+- 事件注入
+- 指标和投票
+- 记忆演化
+- 情景分支
+- 批量实验
 
-### Phase 4: Collaboration and Deployment
+### Phase 4：协作和部署
 
-- hosted deployment
-- user accounts
-- shared worlds
-- export reports
-- remote model configuration
+- 托管部署
+- 用户账号
+- 共享世界
+- 导出报告
+- 远程模型配置
 
-## 11. Testing Strategy
+## 11. 测试策略
 
-Test levels:
+测试层级：
 
-- unit tests for schema validation and deterministic services
-- snapshot tests for prompt output parsers
-- API tests for world and run flows
-- frontend component tests for main workspace views
-- end-to-end smoke test for create world -> extract -> simulate -> report
+- schema 校验和确定性服务的单元测试
+- prompt 输出解析器的快照测试
+- 世界和运行流程的 API 测试
+- 前端主要工作台组件测试
+- 创建世界 -> 抽取 -> 模拟 -> 报告 的端到端烟测
 
-Use mock LLM providers in CI. Real provider tests should be opt-in and require explicit environment variables.
+CI 中默认使用 mock LLM。真实模型测试应显式开启，并要求配置环境变量。
 
-## 12. Engineering Principles
+## 12. 工程原则
 
-- Keep model-facing schemas explicit.
-- Store raw model outputs only as debug artifacts, not trusted state.
-- Make simulation steps replayable.
-- Keep user-editable state separate from generated suggestions.
-- Prefer narrow, useful MVP flows over broad demos.
-- Treat reports as explainable summaries with citations to sources and run events.
+- 面向模型的 schema 必须清晰。
+- 原始模型输出只作为调试材料，不直接当作可信状态。
+- 模拟步骤必须可复放。
+- 用户编辑状态和生成建议要分开存储。
+- 优先做窄而有用的 MVP，不做宽而空的演示。
+- 报告要能解释，并引用来源材料和运行事件。
 
-## 13. Immediate Next Step
+## 13. 近期下一步
 
-Create the first runnable skeleton:
+创建第一个可运行骨架：
 
-- `backend/` FastAPI app with health check
-- `frontend/` Vite React app with a simple workspace shell
-- `docker-compose.yml` optional later, not required for local MVP
-- development scripts documented in README
+- `backend/` FastAPI 应用，包含健康检查
+- `frontend/` Vite React 应用，包含简单工作台外壳
+- 暂不强制加入 `docker-compose.yml`
+- 在 README 中记录开发命令
