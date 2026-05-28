@@ -1,6 +1,6 @@
 ﻿from __future__ import annotations
 
-from typing import Dict, List
+from typing import List
 
 from fastapi import APIRouter, HTTPException
 
@@ -11,7 +11,6 @@ from app.schemas import (
     CreateSourceRequest,
     CreateTimelineEventRequest,
     GraphResponse,
-    LoreEntry,
     Node,
     PredictionReport,
     Project,
@@ -19,20 +18,14 @@ from app.schemas import (
     Source,
     TimelineEvent,
 )
+from app.storage import store
 
 
 router = APIRouter()
 
-projects: Dict[str, Project] = {}
-sources: Dict[str, List[Source]] = {}
-nodes: Dict[str, List[Node]] = {}
-relationships: Dict[str, List[Relationship]] = {}
-timeline_events: Dict[str, List[TimelineEvent]] = {}
-lore_entries: Dict[str, List[LoreEntry]] = {}
-
 
 def ensure_project(project_id: str) -> Project:
-    project = projects.get(project_id)
+    project = store.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     return project
@@ -40,19 +33,13 @@ def ensure_project(project_id: str) -> Project:
 
 @router.get("/projects")
 def list_projects() -> List[Project]:
-    return list(projects.values())
+    return store.list_projects()
 
 
 @router.post("/projects")
 def create_project(payload: CreateProjectRequest) -> Project:
     project = Project.create(name=payload.name, description=payload.description)
-    projects[project.id] = project
-    sources[project.id] = []
-    nodes[project.id] = []
-    relationships[project.id] = []
-    timeline_events[project.id] = []
-    lore_entries[project.id] = []
-    return project
+    return store.save_project(project)
 
 
 @router.get("/projects/{project_id}")
@@ -69,20 +56,22 @@ def add_source(project_id: str, payload: CreateSourceRequest) -> Source:
         type=payload.type,
         content=payload.content,
     )
-    sources[project_id].append(source)
-    return source
+    return store.save_source(source)
 
 
 @router.get("/projects/{project_id}/sources")
 def list_sources(project_id: str) -> List[Source]:
     ensure_project(project_id)
-    return sources[project_id]
+    return store.list_sources(project_id)
 
 
 @router.get("/projects/{project_id}/graph")
 def get_graph(project_id: str) -> GraphResponse:
     ensure_project(project_id)
-    return GraphResponse(nodes=nodes[project_id], relationships=relationships[project_id])
+    return GraphResponse(
+        nodes=store.list_nodes(project_id),
+        relationships=store.list_relationships(project_id),
+    )
 
 
 @router.post("/projects/{project_id}/nodes")
@@ -94,14 +83,13 @@ def add_node(project_id: str, payload: CreateNodeRequest) -> Node:
         type=payload.type,
         summary=payload.summary,
     )
-    nodes[project_id].append(node)
-    return node
+    return store.save_node(node)
 
 
 @router.post("/projects/{project_id}/relationships")
 def add_relationship(project_id: str, payload: CreateRelationshipRequest) -> Relationship:
     ensure_project(project_id)
-    existing_ids = {node.id for node in nodes[project_id]}
+    existing_ids = {node.id for node in store.list_nodes(project_id)}
     if payload.source_node_id not in existing_ids or payload.target_node_id not in existing_ids:
         raise HTTPException(status_code=400, detail="关系两端节点必须存在")
     relationship = Relationship.create(
@@ -111,14 +99,13 @@ def add_relationship(project_id: str, payload: CreateRelationshipRequest) -> Rel
         type=payload.type,
         summary=payload.summary,
     )
-    relationships[project_id].append(relationship)
-    return relationship
+    return store.save_relationship(relationship)
 
 
 @router.get("/projects/{project_id}/timeline")
 def get_timeline(project_id: str) -> List[TimelineEvent]:
     ensure_project(project_id)
-    return sorted(timeline_events[project_id], key=lambda event: event.time_order)
+    return store.list_timeline_events(project_id)
 
 
 @router.post("/projects/{project_id}/timeline-events")
@@ -132,15 +119,14 @@ def add_timeline_event(project_id: str, payload: CreateTimelineEventRequest) -> 
         description=payload.description,
         participant_node_ids=payload.participant_node_ids,
     )
-    timeline_events[project_id].append(event)
-    return event
+    return store.save_timeline_event(event)
 
 
 @router.post("/projects/{project_id}/predictions")
 def create_prediction(project_id: str) -> PredictionReport:
     ensure_project(project_id)
-    project_nodes = nodes[project_id]
-    project_events = sorted(timeline_events[project_id], key=lambda event: event.time_order)
+    project_nodes = store.list_nodes(project_id)
+    project_events = store.list_timeline_events(project_id)
     focus = "、".join(node.name for node in project_nodes[:3]) or "当前世界"
     latest_event = project_events[-1].title if project_events else "尚未建立时间线事件"
     return PredictionReport(
@@ -158,4 +144,3 @@ def create_prediction(project_id: str) -> PredictionReport:
             "哪些世界观规则会限制剧情走向？",
         ],
     )
-

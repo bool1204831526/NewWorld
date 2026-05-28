@@ -1,4 +1,4 @@
-# OS and editor files
+﻿# OS and editor files
 .DS_Store
 Thumbs.db
 .vscode/
@@ -32,3 +32,5 @@ coverage/
 data/local/
 outputs/
 tmp/
+backend/data/
+
