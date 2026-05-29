@@ -860,6 +860,11 @@ button.subtle {
   stroke-dasharray: 7 5;
 }
 
+.timeline-flow-line.selected {
+  stroke: #ef4444;
+  stroke-width: 5;
+}
+
 .timeline-node {
   position: absolute;
   z-index: 2;

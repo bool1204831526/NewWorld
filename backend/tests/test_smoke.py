@@ -420,3 +420,33 @@ def test_organize_timeline_flow_with_llm(monkeypatch) -> None:
     assert layout["has_layout"] is True
     assert layout["edges"] == [{"id": "llm_branch", "source_event_id": first["id"], "target_event_id": second["id"]}]
     assert client.get(f"/api/projects/{project['id']}/timeline-flow").json() == layout
+
+
+def test_delete_timeline_event_cleans_flow_layout() -> None:
+    project_response = client.post("/api/projects", json={"name": "流程节点删除测试"})
+    project = project_response.json()
+    first = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "出发", "time_label": "第一章", "time_order": 1, "description": "离开故乡。", "participant_node_ids": []},
+    ).json()
+    second = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "分歧", "time_label": "第二章", "time_order": 2, "description": "路线分开。", "participant_node_ids": []},
+    ).json()
+    client.put(
+        f"/api/projects/{project['id']}/timeline-flow",
+        json={
+            "project_id": project["id"],
+            "positions": [{"event_id": first["id"], "x": 120, "y": 90}, {"event_id": second["id"], "x": 320, "y": 260}],
+            "edges": [{"id": "edge_one", "source_event_id": first["id"], "target_event_id": second["id"]}],
+            "has_layout": True,
+        },
+    )
+
+    response = client.delete(f"/api/projects/{project['id']}/timeline-events/{first['id']}")
+    assert response.status_code == 200
+    timeline = client.get(f"/api/projects/{project['id']}/timeline").json()
+    assert [event["id"] for event in timeline] == [second["id"]]
+    layout = client.get(f"/api/projects/{project['id']}/timeline-flow").json()
+    assert layout["positions"] == [{"event_id": second["id"], "x": 320.0, "y": 260.0}]
+    assert layout["edges"] == []

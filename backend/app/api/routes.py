@@ -260,6 +260,23 @@ def update_timeline_event(project_id: str, event_id: str, payload: CreateTimelin
     return store.update_timeline_event(existing)
 
 
+@router.delete("/projects/{project_id}/timeline-events/{event_id}")
+def delete_timeline_event(project_id: str, event_id: str) -> dict:
+    ensure_project(project_id)
+    deleted = store.delete_timeline_event(project_id, event_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="时间线事件不存在")
+    layout = store.get_timeline_flow_layout(project_id)
+    if layout.has_layout:
+        layout.positions = [position for position in layout.positions if position.event_id != event_id]
+        layout.edges = [
+            edge for edge in layout.edges
+            if edge.source_event_id != event_id and edge.target_event_id != event_id
+        ]
+        store.save_timeline_flow_layout(layout)
+    return {"deleted": True, "event_id": event_id}
+
+
 @router.get("/projects/{project_id}/timeline-flow")
 def get_timeline_flow(project_id: str) -> TimelineFlowLayout:
     ensure_project(project_id)

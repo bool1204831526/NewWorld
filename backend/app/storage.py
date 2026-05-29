@@ -318,6 +318,17 @@ class SQLiteStore:
     def list_timeline_events(self, project_id: str) -> List[TimelineEvent]:
         return self._list_by_project(TimelineEvent, "timeline_events", project_id, "time_order ASC")
 
+    def delete_timeline_event(self, project_id: str, event_id: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM timeline_events WHERE id = ? AND project_id = ?",
+                (event_id, project_id),
+            ).fetchone()
+            if not row:
+                return False
+            connection.execute("DELETE FROM timeline_events WHERE id = ? AND project_id = ?", (event_id, project_id))
+        return True
+
     def get_timeline_flow_layout(self, project_id: str) -> TimelineFlowLayout:
         with self.connect() as connection:
             row = connection.execute(

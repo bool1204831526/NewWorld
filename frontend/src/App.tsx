@@ -74,6 +74,7 @@ export default function App() {
   const [timelineFlowLayout, setTimelineFlowLayout] = useState<TimelineFlowLayout>({ positions: {}, edges: [], hasLayout: false });
   const [timelineEdgeSourceId, setTimelineEdgeSourceId] = useState("");
   const [timelineEdgeTargetId, setTimelineEdgeTargetId] = useState("");
+  const [selectedTimelineEdgeId, setSelectedTimelineEdgeId] = useState("");
   const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
   const [report, setReport] = useState<PredictionReport | null>(null);
   const [status, setStatus] = useState("准备就绪");
@@ -129,11 +130,7 @@ export default function App() {
       positions[event.id] = saved.positions[event.id] ?? { x: 320, y: 70 + index * 180 };
     });
     const eventIds = new Set(events.map((event) => event.id));
-    const defaultEdges: TimelineFlowEdge[] = events.slice(0, -1).map((event, index) => ({
-      id: `default_${event.id}_${events[index + 1].id}`,
-      sourceEventId: event.id,
-      targetEventId: events[index + 1].id,
-    }));
+    const defaultEdges: TimelineFlowEdge[] = [];
     const customEdges = saved.edges.filter((edge) => eventIds.has(edge.sourceEventId) && eventIds.has(edge.targetEventId));
     const edgeKeys = new Set<string>();
     const edges = [...defaultEdges, ...customEdges].filter((edge) => {
@@ -202,6 +199,27 @@ export default function App() {
         edges: [...layout.edges, { id: `edge_${Date.now()}`, sourceEventId: timelineEdgeSourceId, targetEventId: timelineEdgeTargetId }],
       };
     });
+  }
+  function handleDeleteSelectedTimelineEdge() {
+    if (!selectedTimelineEdgeId) return;
+    updateTimelineFlowLayout((layout) => ({
+      ...layout,
+      edges: layout.edges.filter((edge) => edge.id !== selectedTimelineEdgeId),
+    }));
+    setSelectedTimelineEdgeId("");
+  }
+
+  function handleDeleteEditingTimelineEvent() {
+    if (!editingEvent) return;
+    const confirmed = window.confirm(`删除流程节点“${editingEvent.title}”？相关连线也会删除。`);
+    if (!confirmed) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      await api.deleteTimelineEvent(projectId, editingEvent.id);
+      await refreshProject(projectId);
+      setEditingEventId("");
+      setSelectedTimelineEdgeId("");
+    }, "流程节点已删除");
   }
 
   function handleDeleteTimelineFlow() {
@@ -469,7 +487,7 @@ export default function App() {
     if (!title || !time_label) return;
     runAction(async () => {
       const projectId = requireProject();
-      await api.addTimelineEvent(projectId, {
+      const created = await api.addTimelineEvent(projectId, {
         title,
         time_label,
         time_order,
@@ -477,6 +495,12 @@ export default function App() {
         participant_node_ids: participant ? [participant] : [],
       });
       await refreshProject(projectId);
+      await saveTimelineFlowLayout({
+        ...timelineFlowLayout,
+        hasLayout: true,
+        positions: { ...timelineFlowLayout.positions, [created.id]: { x: 320, y: 70 + events.length * 180 } },
+      });
+      setEditingEventId(created.id);
       formElement.reset();
     }, "时间线事件已添加");
   }
@@ -893,7 +917,8 @@ export default function App() {
                       const x2 = target.x + 120;
                       const y2 = target.y;
                       const midY = (y1 + y2) / 2;
-                      return <path className={custom ? "timeline-flow-line custom" : "timeline-flow-line"} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} key={edge.id} markerEnd="url(#timeline-arrow)" />;
+                      const selected = selectedTimelineEdgeId === edge.id;
+                      return <path className={selected ? "timeline-flow-line selected" : custom ? "timeline-flow-line custom" : "timeline-flow-line"} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} key={edge.id} markerEnd="url(#timeline-arrow)" onClick={() => setSelectedTimelineEdgeId(edge.id)} />;
                     })}
                   </svg>
                   {events.map((event) => {
@@ -903,7 +928,7 @@ export default function App() {
                         className={editingEventId === event.id ? "timeline-node active" : "timeline-node"}
                         draggable
                         key={event.id}
-                        onClick={() => setEditingEventId(event.id)}
+                        onClick={() => { setEditingEventId(event.id); setSelectedTimelineEdgeId(""); }}
                         onDragEnd={(dragEvent) => handleTimelineNodeDrag(event.id, dragEvent)}
                         style={{ left: position.x, top: position.y }}
                         type="button"

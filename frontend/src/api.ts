@@ -179,6 +179,8 @@ export const api = {
     eventId: string,
     payload: { title: string; time_label: string; time_order: number; description: string; participant_node_ids: string[] },
   ) => request<TimelineEvent>(`/projects/${projectId}/timeline-events/${eventId}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteTimelineEvent: (projectId: string, eventId: string) =>
+    request<{ deleted: boolean; event_id: string }>(`/projects/${projectId}/timeline-events/${eventId}`, { method: "DELETE" }),
   createPrediction: (projectId: string) =>
     request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
 };
