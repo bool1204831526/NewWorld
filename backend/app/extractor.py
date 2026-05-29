@@ -8,7 +8,7 @@ import urllib.request
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from app.schemas import LLMExtractionConfig, LoreEntry, Node, Relationship, Source, TimelineEvent
+from app.schemas import LLMExtractionConfig, LoreEntry, Node, Relationship, Source, TimelineEvent, TimelineFlowEdge, TimelineFlowLayout, TimelineFlowPosition
 from app.storage import SQLiteStore
 
 NODE_TYPES = {
@@ -200,6 +200,125 @@ def extract_source_with_llm(
         events.append(event)
 
     return {"nodes": nodes, "relationships": relationships, "lore": lore, "events": events}
+
+
+
+def organize_timeline_flow_with_llm(
+    project_id: str,
+    events: List[TimelineEvent],
+    config: LLMExtractionConfig,
+) -> TimelineFlowLayout:
+    if not events:
+        return TimelineFlowLayout(project_id=project_id)
+    payload = call_llm_timeline_organizer(events, config)
+    event_ids = {event.id for event in events}
+    positions: List[TimelineFlowPosition] = []
+    seen_positions = set()
+    for item in payload.get("positions", [])[: len(events)]:
+        event_id = str(item.get("event_id") or "")
+        if event_id not in event_ids or event_id in seen_positions:
+            continue
+        seen_positions.add(event_id)
+        positions.append(
+            TimelineFlowPosition(
+                event_id=event_id,
+                x=max(0.0, float(item.get("x") or 320)),
+                y=max(0.0, float(item.get("y") or 80)),
+            )
+        )
+    positioned_ids = {position.event_id for position in positions}
+    for index, event in enumerate(events):
+        if event.id not in positioned_ids:
+            positions.append(TimelineFlowPosition(event_id=event.id, x=320 + (index % 2) * 180, y=70 + index * 180))
+
+    edges: List[TimelineFlowEdge] = []
+    edge_keys = set()
+    for item in payload.get("edges", [])[: max(len(events) * 3, 12)]:
+        source_event_id = str(item.get("source_event_id") or item.get("source") or "")
+        target_event_id = str(item.get("target_event_id") or item.get("target") or "")
+        if source_event_id not in event_ids or target_event_id not in event_ids or source_event_id == target_event_id:
+            continue
+        key = (source_event_id, target_event_id)
+        if key in edge_keys:
+            continue
+        edge_keys.add(key)
+        edge_id = str(item.get("id") or f"llm_edge_{len(edges) + 1}")[:60]
+        edges.append(TimelineFlowEdge(id=edge_id, source_event_id=source_event_id, target_event_id=target_event_id))
+    if not edges:
+        for index, event in enumerate(events[:-1]):
+            edges.append(TimelineFlowEdge(id=f"llm_edge_{index + 1}", source_event_id=event.id, target_event_id=events[index + 1].id))
+    return TimelineFlowLayout(project_id=project_id, positions=positions, edges=edges)
+
+
+def call_llm_timeline_organizer(events: List[TimelineEvent], config: LLMExtractionConfig) -> Dict:
+    api_base = validate_llm_api_base(config.api_base)
+    api_key = validate_llm_api_key(config.api_key)
+    model = config.model.strip()
+    if not model:
+        raise ValueError("LLM 模型名不能为空")
+    url = f"{api_base}/chat/completions"
+    event_payload = [
+        {
+            "id": event.id,
+            "title": event.title,
+            "time_label": event.time_label,
+            "time_order": event.time_order,
+            "description": event.description,
+        }
+        for event in events
+    ]
+    prompt = (
+        "你是小说时间线流程图整理器。请只返回 JSON，不要解释。"
+        "根据事件先后、因果、分支关系，为竖向流程图生成布局。"
+        "JSON 字段：positions, edges。"
+        "positions: [{event_id,x,y}]，y 按时间从上到下递增，x 用于区分主线和分支。"
+        "edges: [{id,source_event_id,target_event_id}]，表示因果或剧情走向，可以有多条分支线。"
+        "必须只使用用户提供的事件 id。"
+    )
+    body = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": json.dumps({"events": event_payload}, ensure_ascii=False)},
+        ],
+        "temperature": 0.2,
+    }
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "NewWorld/0.1 OpenAI-Compatible-Client",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            response_text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        error_body = error.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"LLM 接口返回 HTTP {error.code}：{extract_llm_error_message(error_body, error.code)}")
+    except urllib.error.URLError as error:
+        raise ValueError(f"无法连接 LLM 接口：{error.reason}")
+    except TimeoutError:
+        raise ValueError("LLM 请求超时，请检查网络或稍后重试")
+
+    try:
+        response_data = json.loads(response_text)
+        content = response_data["choices"][0]["message"]["content"]
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError(f"LLM 接口返回格式不符合 OpenAI Chat Completions：{error}")
+
+    try:
+        parsed = json.loads(strip_json_code_fence(content))
+    except json.JSONDecodeError as error:
+        preview = content[:300].replace("\n", " ")
+        raise ValueError(f"LLM 未返回合法 JSON：{error.msg}。返回片段：{preview}")
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM 返回内容不是 JSON 对象")
+    return parsed
 
 
 def call_llm_extractor(source: Source, config: LLMExtractionConfig) -> Dict:

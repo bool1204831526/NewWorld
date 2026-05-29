@@ -202,6 +202,7 @@ class TimelineFlowLayout(BaseModel):
     positions: List[TimelineFlowPosition] = []
     edges: List[TimelineFlowEdge] = []
 
+
 class LLMExtractionConfig(BaseModel):
     api_base: str = "https://api.openai.com/v1"
     api_key: str = Field(min_length=1)
@@ -212,6 +213,12 @@ class ExtractProjectRequest(BaseModel):
     source_ids: List[str] = []
     mode: str = "rules"
     llm: Optional[LLMExtractionConfig] = None
+
+
+class OrganizeTimelineFlowRequest(BaseModel):
+    llm: LLMExtractionConfig
+
+
 class GraphResponse(BaseModel):
     nodes: List[Node]
     relationships: List[Relationship]

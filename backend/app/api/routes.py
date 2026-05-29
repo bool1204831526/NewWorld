@@ -5,7 +5,7 @@ from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.extractor import extract_world
+from app.extractor import extract_world, organize_timeline_flow_with_llm
 from app.schemas import (
     CreateNodeRequest,
     CreateProjectRequest,
@@ -18,6 +18,7 @@ from app.schemas import (
     LoreEntry,
     MergeNodeRequest,
     Node,
+    OrganizeTimelineFlowRequest,
     PredictionReport,
     Project,
     Relationship,
@@ -38,6 +39,28 @@ def ensure_project(project_id: str) -> Project:
     if not project:
         raise HTTPException(status_code=404, detail="项目不存在")
     return project
+
+
+def sanitize_timeline_flow_layout(project_id: str, payload: TimelineFlowLayout) -> TimelineFlowLayout:
+    event_ids = {event.id for event in store.list_timeline_events(project_id)}
+    positions = [
+        TimelineFlowPosition(event_id=item.event_id, x=max(0, item.x), y=max(0, item.y))
+        for item in payload.positions
+        if item.event_id in event_ids
+    ]
+    edge_keys = set()
+    edges: List[TimelineFlowEdge] = []
+    for edge in payload.edges:
+        if edge.source_event_id == edge.target_event_id:
+            continue
+        if edge.source_event_id not in event_ids or edge.target_event_id not in event_ids:
+            continue
+        key = (edge.source_event_id, edge.target_event_id)
+        if key in edge_keys:
+            continue
+        edge_keys.add(key)
+        edges.append(edge)
+    return TimelineFlowLayout(project_id=project_id, positions=positions, edges=edges)
 
 
 @router.get("/projects")
@@ -246,26 +269,26 @@ def get_timeline_flow(project_id: str) -> TimelineFlowLayout:
 @router.put("/projects/{project_id}/timeline-flow")
 def save_timeline_flow(project_id: str, payload: TimelineFlowLayout) -> TimelineFlowLayout:
     ensure_project(project_id)
-    event_ids = {event.id for event in store.list_timeline_events(project_id)}
-    positions = [
-        TimelineFlowPosition(event_id=item.event_id, x=max(0, item.x), y=max(0, item.y))
-        for item in payload.positions
-        if item.event_id in event_ids
-    ]
-    edge_keys = set()
-    edges: List[TimelineFlowEdge] = []
-    for edge in payload.edges:
-        if edge.source_event_id == edge.target_event_id:
-            continue
-        if edge.source_event_id not in event_ids or edge.target_event_id not in event_ids:
-            continue
-        key = (edge.source_event_id, edge.target_event_id)
-        if key in edge_keys:
-            continue
-        edge_keys.add(key)
-        edges.append(edge)
-    layout = TimelineFlowLayout(project_id=project_id, positions=positions, edges=edges)
-    return store.save_timeline_flow_layout(layout)
+    return store.save_timeline_flow_layout(sanitize_timeline_flow_layout(project_id, payload))
+
+
+@router.delete("/projects/{project_id}/timeline-flow")
+def delete_timeline_flow(project_id: str) -> TimelineFlowLayout:
+    ensure_project(project_id)
+    return store.delete_timeline_flow_layout(project_id)
+
+
+@router.post("/projects/{project_id}/timeline-flow/organize")
+def organize_timeline_flow(project_id: str, payload: OrganizeTimelineFlowRequest) -> TimelineFlowLayout:
+    ensure_project(project_id)
+    events = store.list_timeline_events(project_id)
+    if not events:
+        raise HTTPException(status_code=400, detail="没有可整理的时间线事件")
+    try:
+        layout = organize_timeline_flow_with_llm(project_id, events, payload.llm)
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    return store.save_timeline_flow_layout(sanitize_timeline_flow_layout(project_id, layout))
 
 
 @router.post("/projects/{project_id}/predictions")

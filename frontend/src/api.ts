@@ -53,14 +53,16 @@ export interface ExtractionResult {
 }
 
 
+export interface LLMConfigPayload {
+  api_base: string;
+  api_key: string;
+  model: string;
+}
+
 export interface ExtractProjectPayload {
   source_ids?: string[];
   mode?: "rules" | "llm";
-  llm?: {
-    api_base: string;
-    api_key: string;
-    model: string;
-  } | null;
+  llm?: LLMConfigPayload | null;
 }
 export interface TimelineEvent {
   id: string;
@@ -163,6 +165,10 @@ export const api = {
   getTimelineFlow: (projectId: string) => request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`),
   saveTimelineFlow: (projectId: string, payload: TimelineFlowLayout) =>
     request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteTimelineFlow: (projectId: string) =>
+    request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`, { method: "DELETE" }),
+  organizeTimelineFlow: (projectId: string, llm: LLMConfigPayload) =>
+    request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow/organize`, { method: "POST", body: JSON.stringify({ llm }) }),
   addTimelineEvent: (
     projectId: string,
     payload: { title: string; time_label: string; time_order: number; description: string; participant_node_ids: string[] },

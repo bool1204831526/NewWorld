@@ -317,6 +317,7 @@ class SQLiteStore:
 
     def list_timeline_events(self, project_id: str) -> List[TimelineEvent]:
         return self._list_by_project(TimelineEvent, "timeline_events", project_id, "time_order ASC")
+
     def get_timeline_flow_layout(self, project_id: str) -> TimelineFlowLayout:
         with self.connect() as connection:
             row = connection.execute(
@@ -337,6 +338,12 @@ class SQLiteStore:
                 (layout.project_id, serialize(layout)),
             )
         return layout
+
+    def delete_timeline_flow_layout(self, project_id: str) -> TimelineFlowLayout:
+        with self.connect() as connection:
+            connection.execute("DELETE FROM timeline_flow_layouts WHERE project_id = ?", (project_id,))
+        return TimelineFlowLayout(project_id=project_id)
+
     def _get_one(self, model: Type[T], table: str, item_id: str) -> Optional[T]:
         with self.connect() as connection:
             row = connection.execute(f"SELECT data FROM {table} WHERE id = ?", (item_id,)).fetchone()

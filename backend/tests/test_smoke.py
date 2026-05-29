@@ -362,3 +362,57 @@ def test_timeline_flow_layout_persists() -> None:
     loaded = client.get(f"/api/projects/{project['id']}/timeline-flow")
     assert loaded.status_code == 200
     assert loaded.json() == saved
+
+
+def test_delete_timeline_flow_layout() -> None:
+    project_response = client.post("/api/projects", json={"name": "删除流程图布局测试"})
+    project = project_response.json()
+    event = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "出发", "time_label": "第一章", "time_order": 1, "description": "离开故乡。", "participant_node_ids": []},
+    ).json()
+    client.put(
+        f"/api/projects/{project['id']}/timeline-flow",
+        json={"project_id": project["id"], "positions": [{"event_id": event["id"], "x": 120, "y": 90}], "edges": []},
+    )
+
+    response = client.delete(f"/api/projects/{project['id']}/timeline-flow")
+    assert response.status_code == 200
+    assert response.json() == {"project_id": project["id"], "positions": [], "edges": []}
+    assert client.get(f"/api/projects/{project['id']}/timeline-flow").json()["positions"] == []
+
+
+def test_organize_timeline_flow_with_llm(monkeypatch) -> None:
+    project_response = client.post("/api/projects", json={"name": "LLM流程图整理测试"})
+    project = project_response.json()
+    first = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "出发", "time_label": "第一章", "time_order": 1, "description": "离开故乡。", "participant_node_ids": []},
+    ).json()
+    second = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "分歧", "time_label": "第二章", "time_order": 2, "description": "路线分开。", "participant_node_ids": []},
+    ).json()
+
+    def fake_organizer(project_id, events, config):
+        from app.schemas import TimelineFlowEdge, TimelineFlowLayout, TimelineFlowPosition
+
+        return TimelineFlowLayout(
+            project_id=project_id,
+            positions=[
+                TimelineFlowPosition(event_id=events[0].id, x=300, y=80),
+                TimelineFlowPosition(event_id=events[1].id, x=520, y=260),
+            ],
+            edges=[TimelineFlowEdge(id="llm_branch", source_event_id=events[0].id, target_event_id=events[1].id)],
+        )
+
+    monkeypatch.setattr("app.api.routes.organize_timeline_flow_with_llm", fake_organizer)
+    response = client.post(
+        f"/api/projects/{project['id']}/timeline-flow/organize",
+        json={"llm": {"api_base": "https://example.com/v1", "api_key": "sk-test", "model": "test-model"}},
+    )
+    assert response.status_code == 200
+    layout = response.json()
+    assert {position["event_id"] for position in layout["positions"]} == {first["id"], second["id"]}
+    assert layout["edges"] == [{"id": "llm_branch", "source_event_id": first["id"], "target_event_id": second["id"]}]
+    assert client.get(f"/api/projects/{project['id']}/timeline-flow").json() == layout

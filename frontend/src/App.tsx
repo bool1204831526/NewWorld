@@ -79,6 +79,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [activeView, setActiveView] = useState<"map" | "timeline" | "lore" | "report">("map");
   const [extracting, setExtracting] = useState(false);
+  const [organizingTimeline, setOrganizingTimeline] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
   const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
@@ -523,6 +524,19 @@ export default function App() {
     setLlmProfiles((current) => current.filter((profile) => profile.id !== profileId));
     setStatus("LLM 配置已删除");
   }
+
+  function getLLMConfigPayload() {
+    const payload = {
+      api_base: llmApiBase.trim(),
+      api_key: llmApiKey.trim(),
+      model: llmModel.trim(),
+    };
+    if (!payload.api_base || !payload.api_key || !payload.model) {
+      throw new Error("请填写 LLM API Base、API Key 和模型名");
+    }
+    return payload;
+  }
+
   function handleExtractWorld() {
     setExtracting(true);
     setStatus(extractMode === "llm" ? "正在调用 LLM 抽取世界，请稍等..." : "正在抽取世界...");
