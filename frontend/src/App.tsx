@@ -199,14 +199,26 @@ export default function App() {
     });
   }
 
+  function handleDeleteTimelineFlow() {
+    runAction(async () => {
+      const projectId = requireProject();
+      const cleared = await api.deleteTimelineFlow(projectId);
+      setTimelineFlowLayout(normalizeTimelineFlowLayout(cleared));
+      setTimelineEdgeSourceId("");
+      setTimelineEdgeTargetId("");
+    }, "流程图布局已删除");
+  }
+
   function handleResetTimelineFlow() {
-    saveTimelineFlowLayout({ positions: {}, edges: [] })
-      .then(() => {
-        setTimelineEdgeSourceId("");
-        setTimelineEdgeTargetId("");
-        setStatus("流程图布局已重置");
-      })
-      .catch((error) => setStatus(error instanceof Error ? error.message : "流程图保存失败"));
+    setOrganizingTimeline(true);
+    setStatus("正在调用 LLM 整理时间线流程图，请稍等...");
+    runAction(async () => {
+      const projectId = requireProject();
+      const layout = await api.organizeTimelineFlow(projectId, getLLMConfigPayload());
+      setTimelineFlowLayout(normalizeTimelineFlowLayout(layout));
+      setTimelineEdgeSourceId("");
+      setTimelineEdgeTargetId("");
+    }, "LLM 已重置时间线流程图", true).finally(() => setOrganizingTimeline(false));
   }
 
   const graphLayout = useMemo(() => {
@@ -542,14 +554,7 @@ export default function App() {
     setStatus(extractMode === "llm" ? "正在调用 LLM 抽取世界，请稍等..." : "正在抽取世界...");
     runAction(async () => {
       const projectId = requireProject();
-      const llmPayload = extractMode === "llm" ? {
-        api_base: llmApiBase.trim(),
-        api_key: llmApiKey.trim(),
-        model: llmModel.trim(),
-      } : null;
-      if (extractMode === "llm" && (!llmPayload?.api_base || !llmPayload.api_key || !llmPayload.model)) {
-        throw new Error("请填写 LLM API Base、API Key 和模型名");
-      }
+      const llmPayload = extractMode === "llm" ? getLLMConfigPayload() : null;
       const result = await api.extractProject(projectId, {
         source_ids: selectedSourceIds,
         mode: extractMode,
@@ -861,7 +866,8 @@ export default function App() {
                 {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
               </select>
               <button disabled={!timelineEdgeSourceId || !timelineEdgeTargetId || timelineEdgeSourceId === timelineEdgeTargetId} onClick={handleAddTimelineEdge} type="button">添加分支线</button>
-              <button onClick={handleResetTimelineFlow} type="button">重置布局</button>
+              <button disabled={busy || organizingTimeline || events.length === 0} onClick={handleResetTimelineFlow} type="button">{organizingTimeline ? "整理中..." : "LLM 重置布局"}</button>
+              <button disabled={busy || organizingTimeline} onClick={handleDeleteTimelineFlow} type="button">删除布局</button>
             </div>
             <div className="timeline-flow-canvas">
               {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : (
