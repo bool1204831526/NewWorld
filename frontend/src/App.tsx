@@ -1,6 +1,6 @@
-﻿import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { BookOpen, GitBranch, Layers3, Network, Play, Plus, ScrollText, Sparkles } from "lucide-react";
-import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineBoard, TimelineEvent, TimelineFlowLayout as ApiTimelineFlowLayout, api } from "./api";
+import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineBoard, TimelineEvent, TimelineFlowLayout as ApiTimelineFlowLayout, WikiEntry, api } from "./api";
 import "./styles.css";
 
 const emptyGraph: GraphResponse = { nodes: [], relationships: [] };
@@ -76,18 +76,26 @@ export default function App() {
   const [timelineBoard, setTimelineBoard] = useState<TimelineBoard>(emptyTimelineBoard);
   const [timelineMode, setTimelineMode] = useState<"llm" | "rules" | "manual">("manual");
   const [newLaneName, setNewLaneName] = useState("");
+  const [draggingTimelineEventId, setDraggingTimelineEventId] = useState("");
   const [timelineEdgeSourceId, setTimelineEdgeSourceId] = useState("");
   const [timelineEdgeTargetId, setTimelineEdgeTargetId] = useState("");
   const [selectedTimelineEdgeId, setSelectedTimelineEdgeId] = useState("");
   const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
   const [report, setReport] = useState<PredictionReport | null>(null);
+  const [wikiEntries, setWikiEntries] = useState<WikiEntry[]>([]);
+  const [wikiSearchQuery, setWikiSearchQuery] = useState("");
+  const [wikiKind, setWikiKind] = useState("");
+  const [selectedWikiId, setSelectedWikiId] = useState("");
+  const [predictionNodeId, setPredictionNodeId] = useState("");
   const [status, setStatus] = useState("准备就绪");
   const [busy, setBusy] = useState(false);
-  const [activeView, setActiveView] = useState<"map" | "timeline" | "lore" | "report">("map");
+  const [activeView, setActiveView] = useState<"map" | "timeline" | "lore" | "wiki" | "report">("map");
   const [extracting, setExtracting] = useState(false);
   const [organizingTimeline, setOrganizingTimeline] = useState(false);
   const [selectedNodeId, setSelectedNodeId] = useState("");
+  const [editingNodeId, setEditingNodeId] = useState("");
   const [selectedRelationshipId, setSelectedRelationshipId] = useState("");
+  const [editingRelationshipId, setEditingRelationshipId] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<string[]>([]);
   const [manualNodeName, setManualNodeName] = useState("");
   const [manualNodeType, setManualNodeType] = useState("人物");
@@ -102,7 +110,14 @@ export default function App() {
   const [mergeNodeQuery, setMergeNodeQuery] = useState("");
   const [llmProfileLabel, setLlmProfileLabel] = useState("");
   const [llmProfiles, setLlmProfiles] = useState<LLMProfile[]>(() => loadLLMProfiles());
-
+  const [loreSearchQuery, setLoreSearchQuery] = useState("");
+  const [selectedLoreType, setSelectedLoreType] = useState("全部");
+  const [selectedLoreId, setSelectedLoreId] = useState("");
+  const [creatingLore, setCreatingLore] = useState(false);
+  const [newLoreType, setNewLoreType] = useState("设定");
+  const [newLoreTitle, setNewLoreTitle] = useState("");
+  const [newLoreContent, setNewLoreContent] = useState("");
+
   const activeProject = projects.find((project) => project.id === activeProjectId);
   const relationshipLabels = useMemo(() => {
     const byId = new Map(graph.nodes.map((node) => [node.id, node.name]));
@@ -119,6 +134,9 @@ export default function App() {
   const relationshipTargetNode = findNodeBySearchValue(relationshipTargetQuery);
   const mergeCandidateNode = findNodeBySearchValue(mergeNodeQuery);
   const selectedRelationship = relationshipLabels.find((relationship) => relationship.id === selectedRelationshipId);
+  const editingNode = graph.nodes.find((node) => node.id === editingNodeId);
+  const editingRelationship = relationshipLabels.find((relationship) => relationship.id === editingRelationshipId);
+  const selectedRelationshipGroup = selectedRelationship ? relationshipLabels.filter((relationship) => relationship.source_node_id === selectedRelationship.source_node_id && relationship.target_node_id === selectedRelationship.target_node_id) : [];
   const editingEvent = events.find((event) => event.id === editingEventId);
   const selectedRelationships = useMemo(() => {
     if (!selectedNode) return [];
@@ -155,7 +173,7 @@ export default function App() {
       : events.map((event, index) => ({ event_id: event.id, lane_id: "lane_main", sort_order: index, stage: event.time_label }));
     const lanes = timelineBoard.lanes.length > 0
       ? [...timelineBoard.lanes].sort((left, right) => left.order - right.order)
-      : [{ id: "lane_main", name: "??", type: "main", order: 0 }];
+      : [{ id: "lane_main", name: "主线", type: "main", order: 0 }];
     const placementsByLane = new Map(lanes.map((lane) => [lane.id, [] as typeof placements]));
     placements.forEach((placement) => {
       if (!timelineEventById.has(placement.event_id)) return;
@@ -166,6 +184,19 @@ export default function App() {
     placementsByLane.forEach((items) => items.sort((left, right) => left.sort_order - right.sort_order));
     return { lanes, placementsByLane };
   }, [events, timelineBoard, timelineEventById]);
+
+  const loreTypes = useMemo(() => ["全部", ...Array.from(new Set(loreEntries.map((entry) => entry.type).filter(Boolean)))], [loreEntries]);
+  const filteredLoreEntries = useMemo(() => {
+    const keyword = loreSearchQuery.trim().toLowerCase();
+    return loreEntries.filter((entry) => {
+      const matchesType = selectedLoreType === "全部" || entry.type === selectedLoreType;
+      const haystack = `${entry.title} ${entry.type} ${entry.content}`.toLowerCase();
+      return matchesType && (!keyword || haystack.includes(keyword));
+    });
+  }, [loreEntries, loreSearchQuery, selectedLoreType]);
+  const selectedLoreEntry = filteredLoreEntries.find((entry) => entry.id === selectedLoreId) ?? filteredLoreEntries[0] ?? null;
+  const selectedWikiEntry = wikiEntries.find((entry) => entry.id === selectedWikiId) ?? wikiEntries[0] ?? null;
+
 
 
 
@@ -310,16 +341,42 @@ export default function App() {
     });
   }
 
+  function reorderTimelineEvent(eventId: string, laneId: string, beforeEventId = "") {
+    const lanes = timelineBoardView.lanes;
+    const placementsByLane = new Map(lanes.map((lane) => [lane.id, [...(timelineBoardView.placementsByLane.get(lane.id) ?? [])]]));
+    const movingPlacement = Array.from(placementsByLane.values()).flat().find((placement) => placement.event_id === eventId) ?? {
+      event_id: eventId,
+      lane_id: laneId,
+      sort_order: 0,
+      stage: "",
+    };
+
+    placementsByLane.forEach((placements, currentLaneId) => {
+      placementsByLane.set(currentLaneId, placements.filter((placement) => placement.event_id !== eventId));
+    });
+
+    const targetPlacements = placementsByLane.get(laneId) ?? [];
+    const insertIndex = beforeEventId ? targetPlacements.findIndex((placement) => placement.event_id === beforeEventId) : targetPlacements.length;
+    targetPlacements.splice(insertIndex >= 0 ? insertIndex : targetPlacements.length, 0, { ...movingPlacement, lane_id: laneId });
+    placementsByLane.set(laneId, targetPlacements);
+
+    const nextPlacements = lanes.flatMap((lane) => (placementsByLane.get(lane.id) ?? []).map((placement, index) => ({
+      ...placement,
+      lane_id: lane.id,
+      sort_order: index,
+      stage: placement.stage ?? "",
+    })));
+
+    saveTimelineBoard({ ...timelineBoard, project_id: requireProject(), mode: "manual", lanes, placements: nextPlacements });
+  }
+
   function handleMoveEventToLane(eventId: string, laneId: string) {
-    const existing = timelineBoard.placements.find((placement) => placement.event_id === eventId);
-    const nextPlacements = existing
-      ? timelineBoard.placements.map((placement) => placement.event_id === eventId ? { ...placement, lane_id: laneId } : placement)
-      : [...timelineBoard.placements, { event_id: eventId, lane_id: laneId, sort_order: timelineBoard.placements.length, stage: "" }];
-    saveTimelineBoard({ ...timelineBoard, project_id: requireProject(), mode: "manual", lanes: timelineBoardView.lanes, placements: nextPlacements });
+    reorderTimelineEvent(eventId, laneId);
   }
   const graphLayout = useMemo(() => {
-    const width = 900;
-    const height = 520;
+    const nodeCount = graph.nodes.length;
+    const width = Math.max(980, Math.min(1380, 900 + nodeCount * 10));
+    const height = Math.max(620, Math.min(860, 560 + nodeCount * 6));
     const centerX = width / 2;
     const centerY = height / 2;
     const focusNode = selectedNode;
@@ -340,6 +397,7 @@ export default function App() {
       degree.set(relationship.source_node_id, (degree.get(relationship.source_node_id) ?? 0) + 1);
       degree.set(relationship.target_node_id, (degree.get(relationship.target_node_id) ?? 0) + 1);
     });
+
     const placeOnRing = (index: number, total: number, radiusX: number, radiusY: number, offset = -Math.PI / 2) => {
       const angle = total <= 1 ? offset : (Math.PI * 2 * index) / total + offset;
       return {
@@ -347,41 +405,67 @@ export default function App() {
         y: centerY + Math.sin(angle) * radiusY,
       };
     };
+
+    const sortedNodes = [...graph.nodes].sort((left, right) => (degree.get(right.id) ?? 0) - (degree.get(left.id) ?? 0));
+    const sortedOrder = new Map(sortedNodes.map((node, index) => [node.id, index]));
     const nodes = graph.nodes.map((node, index) => {
       const connected = degree.get(node.id) ?? 0;
       if (focusNode && node.id === focusNode.id) {
         return { ...node, connected, focusLevel: "selected", x: centerX, y: centerY };
       }
       if (focusNode && focusedRelationshipNodeIds.has(node.id)) {
-        const position = placeOnRing(relatedOrder.get(node.id) ?? 0, relatedIds.length, 245, 155);
+        const position = placeOnRing(relatedOrder.get(node.id) ?? 0, relatedIds.length, 255, 165);
         return { ...node, connected, focusLevel: "related", ...position };
       }
       if (focusNode) {
-        const position = placeOnRing(outerOrder.get(node.id) ?? 0, Math.max(outerIds.length, 1), 370, 225, -Math.PI / 3);
+        const position = placeOnRing(outerOrder.get(node.id) ?? 0, Math.max(outerIds.length, 1), 405, 245, -Math.PI / 3);
         return { ...node, connected, focusLevel: "outer", ...position };
       }
-      const position = placeOnRing(index, graph.nodes.length, Math.max(190, Math.min(340, 96 + graph.nodes.length * 18)), Math.max(140, Math.min(210, 82 + graph.nodes.length * 10)));
+      const sortedIndex = sortedOrder.get(node.id) ?? index;
+      const position = placeOnRing(sortedIndex, Math.max(nodeCount, 1), Math.max(250, Math.min(430, 140 + nodeCount * 12)), Math.max(170, Math.min(260, 110 + nodeCount * 7)));
       return { ...node, connected, focusLevel: "normal", ...position };
     });
     const byId = new Map(nodes.map((node) => [node.id, node]));
-    const edges = relationshipLabels
-      .map((relationship) => ({
-        ...relationship,
-        source: byId.get(relationship.source_node_id),
-        target: byId.get(relationship.target_node_id),
-      }))
+    const edgeGroups = new Map<string, typeof relationshipLabels>();
+    relationshipLabels.forEach((relationship) => {
+      const key = `${relationship.source_node_id}->${relationship.target_node_id}`;
+      const group = edgeGroups.get(key) ?? [];
+      group.push(relationship);
+      edgeGroups.set(key, group);
+    });
+    const edges = Array.from(edgeGroups.values())
+      .map((group) => {
+        const primary = group[0];
+        return {
+          ...primary,
+          source: byId.get(primary.source_node_id),
+          target: byId.get(primary.target_node_id),
+          relationshipIds: group.map((relationship) => relationship.id),
+          relationshipCount: group.length,
+          type: group.length > 1 ? `${primary.type} 等${group.length}条` : primary.type,
+        };
+      })
       .filter((edge) => edge.source && edge.target);
     return { width, height, nodes, edges };
   }, [graph.nodes, graph.relationships, relationshipLabels, selectedNode, selectedRelationships]);
 
+  function buildRelationshipPath(edge: { source?: { x: number; y: number }; target?: { x: number; y: number } }) {
+    const x1 = edge.source?.x ?? 0;
+    const y1 = edge.source?.y ?? 0;
+    const x2 = edge.target?.x ?? 0;
+    const y2 = edge.target?.y ?? 0;
+    return { path: `M ${x1} ${y1} L ${x2} ${y2}`, labelX: (x1 + x2) / 2, labelY: (y1 + y2) / 2 };
+  }
+
   async function refreshProject(projectId: string) {
-    const [nextSources, nextGraph, nextEvents, nextLore, nextTimelineFlow, nextTimelineBoard] = await Promise.all([
+    const [nextSources, nextGraph, nextEvents, nextLore, nextTimelineFlow, nextTimelineBoard, nextWiki] = await Promise.all([
       api.listSources(projectId),
       api.getGraph(projectId),
       api.getTimeline(projectId),
       api.getLore(projectId),
       api.getTimelineFlow(projectId),
       api.getTimelineBoard(projectId),
+      api.getWiki(projectId, wikiSearchQuery, wikiKind),
     ]);
     setSources(nextSources);
     setGraph(nextGraph);
@@ -389,6 +473,7 @@ export default function App() {
     setLoreEntries(nextLore);
     setTimelineFlowLayout(normalizeTimelineFlowLayout(nextTimelineFlow));
     setTimelineBoard(nextTimelineBoard);
+    setWikiEntries(nextWiki.entries);
   }
 
   async function loadProjects() {
@@ -549,6 +634,49 @@ export default function App() {
       setRelationshipTargetQuery("");
       formElement.reset();
     }, "关系已添加");
+  }
+
+
+  function handleUpdateNode(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingNode) return;
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("editNodeName") ?? "").trim();
+    const type = String(form.get("editNodeType") ?? "").trim() || "人物";
+    const summary = String(form.get("editNodeSummary") ?? "").trim();
+    const current_state = String(form.get("editNodeState") ?? "").trim();
+    if (!name) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      const node = await api.updateNode(projectId, editingNode.id, { name, type, summary, current_state });
+      await refreshProject(projectId);
+      setSelectedNodeId(node.id);
+      setEditingNodeId("");
+    }, "节点已更新");
+  }
+
+  function handleUpdateRelationship(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editingRelationship) return;
+    const form = new FormData(event.currentTarget);
+    const sourceNode = findNodeBySearchValue(String(form.get("editRelationshipSource") ?? ""));
+    const targetNode = findNodeBySearchValue(String(form.get("editRelationshipTarget") ?? ""));
+    const type = String(form.get("editRelationshipType") ?? "").trim() || "关联";
+    const summary = String(form.get("editRelationshipSummary") ?? "").trim();
+    if (!sourceNode || !targetNode || sourceNode.id === targetNode.id) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      const relationship = await api.updateRelationship(projectId, editingRelationship.id, {
+        source_node_id: sourceNode.id,
+        target_node_id: targetNode.id,
+        type,
+        summary,
+      });
+      await refreshProject(projectId);
+      setSelectedRelationshipId(relationship.id);
+      setSelectedNodeId(sourceNode.id);
+      setEditingRelationshipId("");
+    }, "关系已更新");
   }
 
   function handleAddEvent(event: FormEvent<HTMLFormElement>) {
@@ -725,10 +853,69 @@ export default function App() {
   }
 
 
+  function handleAddLoreEntry() {
+    const type = newLoreType.trim();
+    const title = newLoreTitle.trim();
+    const content = newLoreContent.trim();
+    if (!type || !title || !content) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      const entry = await api.addLoreEntry(projectId, { type, title, content });
+      await refreshProject(projectId);
+      setSelectedLoreId(entry.id);
+      setCreatingLore(false);
+      setNewLoreType("设定");
+      setNewLoreTitle("");
+      setNewLoreContent("");
+    }, "设定条目已新增");
+  }
+
+  function handleUpdateLoreEntry(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedLoreEntry) return;
+    const form = new FormData(event.currentTarget);
+    const type = String(form.get("editLoreType") ?? "").trim();
+    const title = String(form.get("editLoreTitle") ?? "").trim();
+    const content = String(form.get("editLoreContent") ?? "").trim();
+    if (!type || !title || !content) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      const entry = await api.updateLoreEntry(projectId, selectedLoreEntry.id, { type, title, content });
+      await refreshProject(projectId);
+      setSelectedLoreId(entry.id);
+    }, "设定条目已更新");
+  }
+
+  function handleDeleteLoreEntry() {
+    if (!selectedLoreEntry) return;
+    const confirmed = window.confirm("删除设定《" + selectedLoreEntry.title + "》？");
+    if (!confirmed) return;
+    runAction(async () => {
+      const projectId = requireProject();
+      await api.deleteLoreEntry(projectId, selectedLoreEntry.id);
+      setSelectedLoreId("");
+      await refreshProject(projectId);
+    }, "设定条目已删除");
+  }
+
+  function handleRefreshWiki() {
+    runAction(async () => {
+      const projectId = requireProject();
+      const wiki = await api.getWiki(projectId, wikiSearchQuery, wikiKind);
+      setWikiEntries(wiki.entries);
+      setSelectedWikiId((current) => wiki.entries.some((entry) => entry.id === current) ? current : "");
+    }, "Wiki 已更新");
+  }
+
+  function handleSelectWikiLink(entryId: string) {
+    setSelectedWikiId(entryId);
+    setActiveView("wiki");
+  }
+
   function handlePrediction() {
     runAction(async () => {
       const projectId = requireProject();
-      setReport(await api.createPrediction(projectId));
+      setReport(await api.createPrediction(projectId, { focus_node_id: predictionNodeId || null }));
     }, "推演完成");
   }
 
@@ -832,6 +1019,7 @@ export default function App() {
             <button className={activeView === "map" ? "active" : ""} onClick={() => setActiveView("map")} type="button"><Network size={16} />地图</button>
             <button className={activeView === "timeline" ? "active" : ""} onClick={() => setActiveView("timeline")} type="button"><GitBranch size={16} />时间线</button>
             <button className={activeView === "lore" ? "active" : ""} onClick={() => setActiveView("lore")} type="button"><Layers3 size={16} />设定库</button>
+            <button className={activeView === "wiki" ? "active" : ""} onClick={() => setActiveView("wiki")} type="button"><BookOpen size={16} />Wiki</button>
             <button className={activeView === "report" ? "active" : ""} onClick={() => setActiveView("report")} type="button"><ScrollText size={16} />报告</button>
           </nav>
           <button className="primary" disabled={busy || !activeProjectId} onClick={handlePrediction} type="button">
@@ -895,12 +1083,12 @@ export default function App() {
                     {graphLayout.edges.map((edge) => {
                       const relatedToSelectedNode = selectedNode && (edge.source_node_id === selectedNode.id || edge.target_node_id === selectedNode.id);
                       const selected = selectedRelationshipId === edge.id;
-                      const midX = ((edge.source?.x ?? 0) + (edge.target?.x ?? 0)) / 2;
-                      const midY = ((edge.source?.y ?? 0) + (edge.target?.y ?? 0)) / 2;
+                      const showRelationshipLabel = selected || relatedToSelectedNode;
+                      const edgePath = buildRelationshipPath(edge);
                       return (
-                        <g className={selected ? "edge selected" : relatedToSelectedNode ? "edge related" : "edge"} key={edge.id} onClick={() => setSelectedRelationshipId(edge.id)} role="button" tabIndex={0}>
-                          <line markerEnd="url(#arrow)" x1={edge.source?.x} x2={edge.target?.x} y1={edge.source?.y} y2={edge.target?.y} />
-                          <text x={midX} y={midY}>{edge.type}</text>
+                        <g className={selected ? "edge selected" : relatedToSelectedNode ? "edge related" : "edge"} key={edge.id} onClick={() => setSelectedRelationshipId(edge.id)} onDoubleClick={() => { setSelectedRelationshipId(edge.id); setEditingRelationshipId(edge.id); }} role="button" tabIndex={0}>
+                          <path d={edgePath.path} markerEnd="url(#arrow)" />
+                          {showRelationshipLabel ? <text x={edgePath.labelX} y={edgePath.labelY}>{edge.relationshipCount > 1 ? `${edge.relationshipCount}条关系` : edge.type}</text> : null}
                         </g>
                       );
                     })}
@@ -908,7 +1096,7 @@ export default function App() {
                       const selected = selectedNode?.id === node.id;
                       const related = node.focusLevel === "related";
                       return (
-                        <g className={selected ? "graph-node selected" : related ? "graph-node related" : node.focusLevel === "outer" ? "graph-node outer" : "graph-node"} key={node.id} onClick={() => { setSelectedNodeId(node.id); setSelectedRelationshipId(""); }} role="button" tabIndex={0}>
+                        <g className={[selected ? "graph-node selected" : related ? "graph-node related" : node.focusLevel === "outer" ? "graph-node outer" : "graph-node",].filter(Boolean).join(" ")} key={node.id} onClick={() => { setSelectedNodeId(node.id); setSelectedRelationshipId(""); }} onDoubleClick={() => { setSelectedNodeId(node.id); setEditingNodeId(node.id); }} role="button" tabIndex={0}>
                           <circle cx={node.x} cy={node.y} r={selected ? 48 : related ? Math.min(42, 29 + node.connected * 3) : Math.min(28, 18 + node.connected * 2)} />
                           <text x={node.x} y={node.y + 4}>{node.name}</text>
                           <text className="node-type" x={node.x} y={node.y + 24}>{node.type}</text>
@@ -930,9 +1118,17 @@ export default function App() {
                     <p>{selectedNode.summary || selectedNode.current_state || "暂无节点简介"}</p>
                     {selectedRelationship ? (
                       <div className="relationship-card">
-                        <strong>选中关系</strong>
-                        <div><b>{selectedRelationship.sourceName}</b><em>{selectedRelationship.type}</em><b>{selectedRelationship.targetName}</b></div>
-                        <p>{selectedRelationship.summary || "暂无关系说明"}</p>
+                        <strong>选中节点连线</strong>
+                        <div><b>{selectedRelationship.sourceName}</b><em>{selectedRelationshipGroup.length} 条关系</em><b>{selectedRelationship.targetName}</b></div>
+                        <ul className="relationship-group-list">
+                          {selectedRelationshipGroup.map((relationship) => (
+                            <li key={relationship.id} onDoubleClick={() => setEditingRelationshipId(relationship.id)} title="双击修改这条关系">
+                              <div><b>{relationship.sourceName}</b><em>{relationship.type}</em><b>{relationship.targetName}</b></div>
+                              {relationship.summary ? <p>{relationship.summary}</p> : <p>暂无关系说明</p>}
+                              <button className="subtle" onClick={() => setEditingRelationshipId(relationship.id)} type="button">修改</button>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     ) : null}
                     <div className="merge-node-box">
@@ -958,6 +1154,38 @@ export default function App() {
 
           </>
           ) : null}
+          {editingNode ? (
+            <div className="timeline-editor-backdrop" onClick={() => setEditingNodeId("")}>
+              <form className="timeline-editor graph-popup-editor" onClick={(event) => event.stopPropagation()} onSubmit={handleUpdateNode}>
+                <strong>修改节点</strong>
+                <input defaultValue={editingNode.name} name="editNodeName" placeholder="节点名称" />
+                <input defaultValue={editingNode.type} name="editNodeType" placeholder="节点类型" />
+                <textarea defaultValue={editingNode.summary} name="editNodeSummary" placeholder="节点简介" />
+                <textarea defaultValue={editingNode.current_state} name="editNodeState" placeholder="当前状态" />
+                <div className="button-row">
+                  <button disabled={busy} type="submit">保存节点</button>
+                  <button className="subtle" onClick={() => setEditingNodeId("")} type="button">取消</button>
+                </div>
+              </form>
+            </div>
+          ) : null}
+          {editingRelationship ? (
+            <div className="timeline-editor-backdrop" onClick={() => setEditingRelationshipId("")}>
+              <form className="timeline-editor graph-popup-editor" onClick={(event) => event.stopPropagation()} onSubmit={handleUpdateRelationship}>
+                <strong>修改关系</strong>
+                <input defaultValue={`${editingRelationship.sourceName} · ${graph.nodes.find((node) => node.id === editingRelationship.source_node_id)?.type ?? "节点"}`} list="editRelationshipSourceNodes" name="editRelationshipSource" placeholder="搜索起点节点" />
+                <datalist id="editRelationshipSourceNodes">{nodeSearchOptions.map((option) => <option key={option} value={option} />)}</datalist>
+                <input defaultValue={`${editingRelationship.targetName} · ${graph.nodes.find((node) => node.id === editingRelationship.target_node_id)?.type ?? "节点"}`} list="editRelationshipTargetNodes" name="editRelationshipTarget" placeholder="搜索终点节点" />
+                <datalist id="editRelationshipTargetNodes">{nodeSearchOptions.map((option) => <option key={option} value={option} />)}</datalist>
+                <input defaultValue={editingRelationship.type} name="editRelationshipType" placeholder="关系类型" />
+                <textarea defaultValue={editingRelationship.summary} name="editRelationshipSummary" placeholder="关系说明" />
+                <div className="button-row">
+                  <button disabled={busy} type="submit">保存关系</button>
+                  <button className="subtle" onClick={() => setEditingRelationshipId("")} type="button">取消</button>
+                </div>
+              </form>
+            </div>
+          ) : null}
           {activeView === "timeline" ? (
           <section className="panel timeline-panel">
             <div className="section-head"><h2>时间发展线</h2><span>{events.length} 个事件 · {timelineBoardView.lanes.length} 条故事线</span></div>
@@ -971,14 +1199,14 @@ export default function App() {
             {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : (
               <div className="timeline-board">
                 {timelineBoardView.lanes.map((lane) => (
-                  <section className="timeline-lane" key={lane.id}>
+                  <section className="timeline-lane" key={lane.id} onDragOver={(dragEvent) => dragEvent.preventDefault()} onDrop={(dropEvent) => { dropEvent.preventDefault(); const draggedEventId = dropEvent.dataTransfer.getData("text/plain") || draggingTimelineEventId; if (draggedEventId) reorderTimelineEvent(draggedEventId, lane.id); setDraggingTimelineEventId(""); }}>
                     <div className="timeline-lane-head"><strong>{lane.name}</strong><span>{lane.type}</span>{lane.id !== "lane_main" ? <button className="danger subtle" onClick={() => handleDeleteTimelineLane(lane.id)} type="button">删除线</button> : null}</div>
                     <div className="timeline-lane-events">
                       {(timelineBoardView.placementsByLane.get(lane.id) ?? []).map((placement) => {
                         const event = timelineEventById.get(placement.event_id);
                         if (!event) return null;
                         return (
-                          <article className={editingEventId === event.id ? "timeline-card active" : "timeline-card"} key={event.id} onClick={() => setEditingEventId(event.id)}>
+                          <article className={["timeline-card", editingEventId === event.id ? "active" : "", draggingTimelineEventId === event.id ? "dragging" : ""].filter(Boolean).join(" ")} draggable={!busy} key={event.id} onDragEnd={() => setDraggingTimelineEventId("")} onDragOver={(dragEvent) => dragEvent.preventDefault()} onDragStart={(dragEvent) => { setDraggingTimelineEventId(event.id); dragEvent.dataTransfer.effectAllowed = "move"; dragEvent.dataTransfer.setData("text/plain", event.id); }} onDrop={(dropEvent) => { dropEvent.preventDefault(); dropEvent.stopPropagation(); const draggedEventId = dropEvent.dataTransfer.getData("text/plain") || draggingTimelineEventId; if (draggedEventId && draggedEventId !== event.id) reorderTimelineEvent(draggedEventId, placement.lane_id, event.id); setDraggingTimelineEventId(""); }} onDoubleClick={() => setEditingEventId(event.id)} title="双击修改事件，拖拽调整顺序">
                             <time>{event.time_label}</time>
                             <strong>{event.title}</strong>
                             <p>{event.description || "暂无描述"}</p>
@@ -994,7 +1222,7 @@ export default function App() {
               </div>
             )}
             {editingEvent ? (
-              <form className="timeline-editor" onSubmit={handleUpdateTimelineEvent}>
+              <div className="timeline-editor-backdrop" onClick={() => setEditingEventId("")}><form className="timeline-editor" onClick={(event) => event.stopPropagation()} onSubmit={handleUpdateTimelineEvent}>
                 <strong>修改事件</strong>
                 <input name="editEventTitle" defaultValue={editingEvent.title} placeholder="事件标题" />
                 <input name="editTimeLabel" defaultValue={editingEvent.time_label} placeholder="时间，例如：第一章" />
@@ -1002,24 +1230,136 @@ export default function App() {
                 <textarea name="editEventDescription" defaultValue={editingEvent.description} placeholder="事件描述" />
                 <div className="button-row">
                   <button disabled={busy} type="submit">保存修改</button>
-                  <button disabled={busy} onClick={() => setEditingEventId("")} type="button">??</button>
+                  <button disabled={busy} onClick={() => setEditingEventId("")} type="button">取消</button>
                   <button className="danger" disabled={busy} onClick={handleDeleteEditingTimelineEvent} type="button">删除事件</button>
                 </div>
-              </form>
+              </form></div>
             ) : null}
           </section>
           ) : null}
           {activeView === "lore" ? (
           <section className="panel lore-panel">
-            <div className="section-head"><h2>世界观设定</h2><span>{loreEntries.length} 条</span></div>
-            <ul className="lore-list">{loreEntries.length === 0 ? sources.map((source) => <li key={source.id}><strong>{source.title}</strong><span>{source.type} · {source.extracted_at ? "已抽取" : "待抽取"}</span></li>) : loreEntries.map((entry) => <li key={entry.id}><strong>{entry.title}</strong><span>{entry.type}</span><p>{entry.content}</p></li>)}</ul>
+            <div className="section-head lore-head">
+              <div><h2>设定库</h2><span>{loreEntries.length} 条设定 · {loreTypes.length - 1} 类</span></div>
+              <button className="primary" disabled={busy} onClick={() => { setCreatingLore(true); setSelectedLoreId(""); }} type="button"><Plus size={16} />新增设定</button>
+            </div>
+            <div className="lore-workbench">
+              <aside className="lore-index">
+                <div className="lore-filter-row">
+                  <input onChange={(event) => setLoreSearchQuery(event.target.value)} placeholder="搜索设定标题、类型或内容" value={loreSearchQuery} />
+                  <select onChange={(event) => { setSelectedLoreType(event.target.value); setSelectedLoreId(""); setCreatingLore(false); }} value={selectedLoreType}>
+                    {loreTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </div>
+                <ul className="lore-list">
+                  {filteredLoreEntries.length === 0 ? <li className="lore-empty-row">没有匹配的设定</li> : filteredLoreEntries.map((entry) => (
+                    <li key={entry.id}>
+                      <button className={!creatingLore && selectedLoreEntry?.id === entry.id ? "active" : ""} onClick={() => { setCreatingLore(false); setSelectedLoreId(entry.id); }} type="button">
+                        <strong>{entry.title}</strong>
+                        <span>{entry.type}</span>
+                        <p>{entry.content}</p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </aside>
+              <article className="lore-detail">
+                {creatingLore ? (
+                  <div className="lore-create-panel">
+                    <span>新增设定</span>
+                    <input onChange={(event) => setNewLoreType(event.target.value)} placeholder="类型，例如：势力 / 地点 / 规则" value={newLoreType} />
+                    <input onChange={(event) => setNewLoreTitle(event.target.value)} placeholder="设定标题" value={newLoreTitle} />
+                    <textarea onChange={(event) => setNewLoreContent(event.target.value)} placeholder="设定内容" value={newLoreContent} />
+                    <div className="button-row">
+                      <button disabled={busy || !newLoreType.trim() || !newLoreTitle.trim() || !newLoreContent.trim()} onClick={handleAddLoreEntry} type="button">保存设定</button>
+                      <button disabled={busy} onClick={() => setCreatingLore(false)} type="button">取消</button>
+                    </div>
+                  </div>
+                ) : selectedLoreEntry ? (
+                  <form className="lore-edit-form" onSubmit={handleUpdateLoreEntry}>
+                    <span>编辑设定</span>
+                    <input key={selectedLoreEntry.id + "type"} defaultValue={selectedLoreEntry.type} name="editLoreType" placeholder="类型" />
+                    <input key={selectedLoreEntry.id + "title"} defaultValue={selectedLoreEntry.title} name="editLoreTitle" placeholder="标题" />
+                    <textarea key={selectedLoreEntry.id + "content"} defaultValue={selectedLoreEntry.content} name="editLoreContent" placeholder="内容" />
+                    <div className="button-row">
+                      <button disabled={busy} type="submit">保存修改</button>
+                      <button className="danger" disabled={busy} onClick={handleDeleteLoreEntry} type="button">删除设定</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="lore-empty-detail">
+                    <strong>还没有可阅读的设定条目</strong>
+                    <p>导入资料并抽取世界，或者点击右上角新增一条设定。</p>
+                    <button disabled={busy} onClick={() => setCreatingLore(true)} type="button">新增设定</button>
+                  </div>
+                )}
+              </article>
+            </div>
           </section>
 
           ) : null}
+          {activeView === "wiki" ? (
+          <section className="panel wiki-panel">
+            <div className="section-head"><h2>LLM Wiki</h2><span>{wikiEntries.length} 个条目</span></div>
+            <div className="wiki-tools">
+              <input onChange={(event) => setWikiSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") handleRefreshWiki(); }} placeholder="搜索人物、地点、设定、事件" value={wikiSearchQuery} />
+              <select onChange={(event) => setWikiKind(event.target.value)} value={wikiKind}>
+                <option value="">全部类型</option>
+                <option value="node">节点</option>
+                <option value="event">事件</option>
+                <option value="lore">设定</option>
+              </select>
+              <button disabled={busy || !activeProjectId} onClick={handleRefreshWiki} type="button">刷新 Wiki</button>
+            </div>
+            <div className="wiki-workbench">
+              <aside className="wiki-index">
+                {wikiEntries.length === 0 ? <p className="wiki-empty">暂无 Wiki 条目。</p> : wikiEntries.map((entry) => (
+                  <button className={selectedWikiEntry?.id === entry.id ? "active" : ""} key={entry.id} onClick={() => setSelectedWikiId(entry.id)} type="button">
+                    <strong>{entry.title}</strong>
+                    <span>{entry.kind} · {entry.type || "未分类"}</span>
+                    <p>{entry.summary || entry.content}</p>
+                  </button>
+                ))}
+              </aside>
+              <article className="wiki-detail">
+                {selectedWikiEntry ? (
+                  <>
+                    <span>{selectedWikiEntry.kind} · {selectedWikiEntry.type || "未分类"}</span>
+                    <h3>{selectedWikiEntry.title}</h3>
+                    <p>{selectedWikiEntry.content || selectedWikiEntry.summary}</p>
+                    <strong>关联链接</strong>
+                    <ul>
+                      {selectedWikiEntry.links.length === 0 ? <li>暂无关联</li> : selectedWikiEntry.links.map((link) => (
+                        <li key={link.kind + link.id + link.relation}>
+                          <button onClick={() => handleSelectWikiLink(link.id)} type="button"><b>{link.title}</b><em>{link.kind}</em><span>{link.relation}</span></button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : <p>选择一个 Wiki 条目查看内容和关联。</p>}
+              </article>
+            </div>
+          </section>
+          ) : null}
           {activeView === "report" ? (
           <section className="panel report-panel">
-            <div className="section-head"><h2>剧情推演</h2><span>{report ? report.latest_event : "等待推演"}</span></div>
-            {report ? <div className="report"><p>{report.summary}</p><strong>可能分支</strong><ul>{report.branches.map((branch) => <li key={branch}>{branch}</li>)}</ul><strong>待确认问题</strong><ul>{report.open_questions.map((question) => <li key={question}>{question}</li>)}</ul></div> : <p>添加节点和时间线事件后，点击“推演剧情”生成第一版走向。</p>}
+            <div className="section-head"><h2>剧情推演</h2><span>{report ? (report.focus_node_name || report.latest_event) : "等待推演"}</span></div>
+            <div className="prediction-tools">
+              <select onChange={(event) => setPredictionNodeId(event.target.value)} value={predictionNodeId}>
+                <option value="">自动选择核心节点</option>
+                {graph.nodes.map((node) => <option key={node.id} value={node.id}>{node.name} · {node.type}</option>)}
+              </select>
+              <button className="primary" disabled={busy || !activeProjectId || graph.nodes.length === 0} onClick={handlePrediction} type="button"><Play size={16} />推演剧情</button>
+            </div>
+            {report ? (
+              <div className="report">
+                <p>{report.summary}</p>
+                <strong>可能分支</strong>
+                <ul>{report.branches.map((branch) => <li key={branch}>{branch}</li>)}</ul>
+                <strong>待确认问题</strong>
+                <ul>{report.open_questions.map((question) => <li key={question}>{question}</li>)}</ul>
+              </div>
+            ) : <p>选择一个人物或重要节点，系统会根据它的关系网络、时间线和设定推演新的剧情走向。</p>}
           </section>
           ) : null}
         </div>

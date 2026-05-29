@@ -62,7 +62,7 @@ def extract_world(
     skipped_sources = len(candidate_sources) - len(pending_sources)
     existing_nodes = {node.name: node for node in store.list_nodes(project_id)}
     existing_relationship_keys = {
-        (relationship.source_node_id, relationship.target_node_id, relationship.type)
+        (relationship.source_node_id, relationship.target_node_id, relationship.type, relationship.summary.strip())
         for relationship in store.list_relationships(project_id)
     }
     existing_lore_keys = {
@@ -113,7 +113,7 @@ def extract_world(
                 existing_event_keys.add(key)
 
         for relationship in source_relationships:
-            key = (relationship.source_node_id, relationship.target_node_id, relationship.type)
+            key = (relationship.source_node_id, relationship.target_node_id, relationship.type, relationship.summary.strip())
             if key not in existing_relationship_keys:
                 created_relationships.append(store.save_relationship(relationship))
                 existing_relationship_keys.add(key)

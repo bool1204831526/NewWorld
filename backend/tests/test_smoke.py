@@ -478,3 +478,66 @@ def test_timeline_board_rules_organize() -> None:
     loaded = client.get(f"/api/projects/{project['id']}/timeline-board")
     assert loaded.status_code == 200
     assert loaded.json() == board
+
+
+def test_manual_lore_entry_crud_flow() -> None:
+    project_response = client.post("/api/projects", json={"name": "设定库测试"})
+    assert project_response.status_code == 200
+    project = project_response.json()
+
+    create_response = client.post(
+        f"/api/projects/{project['id']}/lore",
+        json={"type": "势力", "title": "灰塔", "content": "灰塔管理旧术档案。"},
+    )
+    assert create_response.status_code == 200
+    entry = create_response.json()
+    assert entry["title"] == "灰塔"
+
+    update_response = client.put(
+        f"/api/projects/{project['id']}/lore/{entry['id']}",
+        json={"type": "组织", "title": "灰塔档案局", "content": "灰塔档案局负责封存旧术。"},
+    )
+    assert update_response.status_code == 200
+    assert update_response.json()["type"] == "组织"
+
+    lore_response = client.get(f"/api/projects/{project['id']}/lore")
+    assert lore_response.status_code == 200
+    assert lore_response.json()[0]["title"] == "灰塔档案局"
+
+    delete_response = client.delete(f"/api/projects/{project['id']}/lore/{entry['id']}")
+    assert delete_response.status_code == 200
+    assert delete_response.json()["deleted"] is True
+
+    empty_response = client.get(f"/api/projects/{project['id']}/lore")
+    assert empty_response.json() == []
+
+
+def test_wiki_entries_from_project_graph() -> None:
+    project_response = client.post("/api/projects", json={"name": "Wiki测试"})
+    assert project_response.status_code == 200
+    project = project_response.json()
+
+    node_response = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "林曜", "type": "人物", "summary": "北境少年。"},
+    )
+    assert node_response.status_code == 200
+    node = node_response.json()
+
+    event_response = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "进入雾港", "time_label": "第一章", "time_order": 1, "description": "林曜进入雾港。", "participant_node_ids": [node["id"]]},
+    )
+    assert event_response.status_code == 200
+
+    lore_response = client.post(
+        f"/api/projects/{project['id']}/lore",
+        json={"type": "地点", "title": "雾港", "content": "林曜抵达的港口城市。"},
+    )
+    assert lore_response.status_code == 200
+
+    wiki_response = client.get(f"/api/projects/{project['id']}/wiki", params={"q": "林曜"})
+    assert wiki_response.status_code == 200
+    entries = wiki_response.json()["entries"]
+    assert any(entry["kind"] == "node" and entry["title"] == "林曜" for entry in entries)
+    assert any(link["kind"] in {"event", "lore"} for entry in entries for link in entry["links"])

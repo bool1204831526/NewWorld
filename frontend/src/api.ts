@@ -119,8 +119,33 @@ export interface GraphResponse {
   relationships: Relationship[];
 }
 
+export interface WikiLink {
+  id: string;
+  kind: string;
+  title: string;
+  relation: string;
+}
+
+export interface WikiEntry {
+  id: string;
+  kind: string;
+  title: string;
+  type: string;
+  summary: string;
+  content: string;
+  links: WikiLink[];
+  source_refs: string[];
+}
+
+export interface WikiResponse {
+  project_id: string;
+  entries: WikiEntry[];
+}
+
 export interface PredictionReport {
   project_id: string;
+  focus_node_id?: string | null;
+  focus_node_name?: string;
   summary: string;
   branches: string[];
   latest_event: string;
@@ -170,11 +195,21 @@ export const api = {
   deleteSource: (projectId: string, sourceId: string) =>
     request<{ deleted: boolean; source_id: string }>(`/projects/${projectId}/sources/${sourceId}`, { method: "DELETE" }),
   getGraph: (projectId: string) => request<GraphResponse>(`/projects/${projectId}/graph`),
+  getWiki: (projectId: string, query = "", kind = "") =>
+    request<WikiResponse>(`/projects/${projectId}/wiki?q=${encodeURIComponent(query)}&kind=${encodeURIComponent(kind)}`),
   getLore: (projectId: string) => request<LoreEntry[]>(`/projects/${projectId}/lore`),
+  addLoreEntry: (projectId: string, payload: { type: string; title: string; content: string }) =>
+    request<LoreEntry>(`/projects/${projectId}/lore`, { method: "POST", body: JSON.stringify(payload) }),
+  updateLoreEntry: (projectId: string, entryId: string, payload: { type: string; title: string; content: string }) =>
+    request<LoreEntry>(`/projects/${projectId}/lore/${entryId}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteLoreEntry: (projectId: string, entryId: string) =>
+    request<{ deleted: boolean; entry_id: string }>(`/projects/${projectId}/lore/${entryId}`, { method: "DELETE" }),
   extractProject: (projectId: string, payload: ExtractProjectPayload = {}) =>
     request<ExtractionResult>(`/projects/${projectId}/extract`, { method: "POST", body: JSON.stringify(payload) }),
   addNode: (projectId: string, payload: { name: string; type: string; summary: string }) =>
     request<NodeItem>(`/projects/${projectId}/nodes`, { method: "POST", body: JSON.stringify(payload) }),
+  updateNode: (projectId: string, nodeId: string, payload: { name: string; type: string; summary: string; current_state: string }) =>
+    request<NodeItem>(`/projects/${projectId}/nodes/${nodeId}`, { method: "PUT", body: JSON.stringify(payload) }),
   mergeNode: (projectId: string, targetNodeId: string, sourceNodeId: string) =>
     request<NodeItem>(`/projects/${projectId}/nodes/${targetNodeId}/merge`, { method: "POST", body: JSON.stringify({ source_node_id: sourceNodeId }) }),
   deleteNode: (projectId: string, nodeId: string) =>
@@ -183,6 +218,11 @@ export const api = {
     projectId: string,
     payload: { source_node_id: string; target_node_id: string; type: string; summary: string },
   ) => request<Relationship>(`/projects/${projectId}/relationships`, { method: "POST", body: JSON.stringify(payload) }),
+  updateRelationship: (
+    projectId: string,
+    relationshipId: string,
+    payload: { source_node_id: string; target_node_id: string; type: string; summary: string },
+  ) => request<Relationship>(`/projects/${projectId}/relationships/${relationshipId}`, { method: "PUT", body: JSON.stringify(payload) }),
   getTimeline: (projectId: string) => request<TimelineEvent[]>(`/projects/${projectId}/timeline`),
   getTimelineBoard: (projectId: string) => request<TimelineBoard>(`/projects/${projectId}/timeline-board`),
   saveTimelineBoard: (projectId: string, payload: TimelineBoard) =>
@@ -207,7 +247,7 @@ export const api = {
   ) => request<TimelineEvent>(`/projects/${projectId}/timeline-events/${eventId}`, { method: "PUT", body: JSON.stringify(payload) }),
   deleteTimelineEvent: (projectId: string, eventId: string) =>
     request<{ deleted: boolean; event_id: string }>(`/projects/${projectId}/timeline-events/${eventId}`, { method: "DELETE" }),
-  createPrediction: (projectId: string) =>
-    request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST" }),
+  createPrediction: (projectId: string, payload: { focus_node_id?: string | null } = {}) =>
+    request<PredictionReport>(`/projects/${projectId}/predictions`, { method: "POST", body: JSON.stringify(payload) }),
 };
 

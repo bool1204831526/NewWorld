@@ -222,7 +222,7 @@ class SQLiteStore:
                 relationship.target_node_id = target_node_id
             if relationship.source_node_id == relationship.target_node_id:
                 continue
-            key = (relationship.source_node_id, relationship.target_node_id, relationship.type)
+            key = (relationship.source_node_id, relationship.target_node_id, relationship.type, relationship.summary.strip())
             if key in seen_keys:
                 continue
             seen_keys.add(key)
@@ -292,10 +292,27 @@ class SQLiteStore:
     def save_lore_entry(self, entry: LoreEntry) -> LoreEntry:
         with self.connect() as connection:
             connection.execute(
-                "INSERT INTO lore_entries (id, project_id, type, data) VALUES (?, ?, ?, ?)",
+                """
+                INSERT INTO lore_entries (id, project_id, type, data) VALUES (?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET type = excluded.type, data = excluded.data
+                """,
                 (entry.id, entry.project_id, entry.type, serialize(entry)),
             )
         return entry
+
+    def get_lore_entry(self, entry_id: str) -> Optional[LoreEntry]:
+        return self._get_one(LoreEntry, "lore_entries", entry_id)
+
+    def delete_lore_entry(self, project_id: str, entry_id: str) -> bool:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT id FROM lore_entries WHERE id = ? AND project_id = ?",
+                (entry_id, project_id),
+            ).fetchone()
+            if not row:
+                return False
+            connection.execute("DELETE FROM lore_entries WHERE id = ? AND project_id = ?", (entry_id, project_id))
+        return True
 
     def list_lore_entries(self, project_id: str) -> List[LoreEntry]:
         return self._list_by_project(LoreEntry, "lore_entries", project_id, "id ASC")

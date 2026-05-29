@@ -62,6 +62,12 @@ class CreateNodeRequest(BaseModel):
     type: str = "人物"
     summary: str = ""
 
+class UpdateNodeRequest(BaseModel):
+    name: str = Field(min_length=1)
+    type: str = "人物"
+    summary: str = ""
+    current_state: str = ""
+
 class Node(BaseModel):
     id: str
     project_id: str
@@ -90,6 +96,12 @@ class MergeNodeRequest(BaseModel):
 
 
 class CreateRelationshipRequest(BaseModel):
+    source_node_id: str
+    target_node_id: str
+    type: str = "关联"
+    summary: str = ""
+
+class UpdateRelationshipRequest(BaseModel):
     source_node_id: str
     target_node_id: str
     type: str = "关联"
@@ -125,6 +137,11 @@ class Relationship(BaseModel):
             type=type,
             summary=summary,
         )
+
+class CreateLoreEntryRequest(BaseModel):
+    type: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    content: str = Field(min_length=1)
 
 class LoreEntry(BaseModel):
     id: str
@@ -249,6 +266,29 @@ class OrganizeTimelineBoardRequest(BaseModel):
 class GraphResponse(BaseModel):
     nodes: List[Node]
     relationships: List[Relationship]
+
+class WikiLink(BaseModel):
+    id: str
+    kind: str
+    title: str
+    relation: str = ""
+
+class WikiEntry(BaseModel):
+    id: str
+    kind: str
+    title: str
+    type: str = ""
+    summary: str = ""
+    content: str = ""
+    links: List[WikiLink] = []
+    source_refs: List[str] = []
+
+class WikiResponse(BaseModel):
+    project_id: str
+    entries: List[WikiEntry]
+
+class CreatePredictionRequest(BaseModel):
+    focus_node_id: Optional[str] = None
 
 class PredictionReport(BaseModel):
     project_id: str
