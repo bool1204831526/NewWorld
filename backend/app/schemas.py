@@ -201,6 +201,7 @@ class TimelineFlowLayout(BaseModel):
     project_id: str
     positions: List[TimelineFlowPosition] = []
     edges: List[TimelineFlowEdge] = []
+    has_layout: bool = False
 
 
 class LLMExtractionConfig(BaseModel):

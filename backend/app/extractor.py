@@ -211,29 +211,56 @@ def organize_timeline_flow_with_llm(
     if not events:
         return TimelineFlowLayout(project_id=project_id)
     payload = call_llm_timeline_organizer(events, config)
-    event_ids = {event.id for event in events}
-    positions: List[TimelineFlowPosition] = []
-    seen_positions = set()
-    for item in payload.get("positions", [])[: len(events)]:
-        event_id = str(item.get("event_id") or "")
-        if event_id not in event_ids or event_id in seen_positions:
-            continue
-        seen_positions.add(event_id)
-        positions.append(
-            TimelineFlowPosition(
-                event_id=event_id,
-                x=max(0.0, float(item.get("x") or 320)),
-                y=max(0.0, float(item.get("y") or 80)),
-            )
+    ordered_events = order_timeline_events_for_flow(events, payload)
+    lane_by_event_id = assign_timeline_lanes(ordered_events, payload)
+    positions = [
+        TimelineFlowPosition(
+            event_id=event.id,
+            x=320 + lane_by_event_id.get(event.id, 0) * 220,
+            y=70 + index * 180,
         )
-    positioned_ids = {position.event_id for position in positions}
-    for index, event in enumerate(events):
-        if event.id not in positioned_ids:
-            positions.append(TimelineFlowPosition(event_id=event.id, x=320 + (index % 2) * 180, y=70 + index * 180))
+        for index, event in enumerate(ordered_events)
+    ]
+    edges = build_timeline_flow_edges(ordered_events, payload)
+    return TimelineFlowLayout(project_id=project_id, positions=positions, edges=edges, has_layout=True)
 
+
+def order_timeline_events_for_flow(events: List[TimelineEvent], payload: Dict) -> List[TimelineEvent]:
+    by_id = {event.id: event for event in events}
+    ordered_ids: List[str] = []
+    for item in payload.get("order", []):
+        event_id = str(item.get("event_id") or item.get("id") or "") if isinstance(item, dict) else str(item)
+        if event_id in by_id and event_id not in ordered_ids:
+            ordered_ids.append(event_id)
+    remaining = [event for event in events if event.id not in set(ordered_ids)]
+    remaining.sort(key=lambda event: (event.time_order, event.time_label, event.title))
+    return [by_id[event_id] for event_id in ordered_ids] + remaining
+
+
+def assign_timeline_lanes(events: List[TimelineEvent], payload: Dict) -> Dict[str, int]:
+    event_ids = {event.id for event in events}
+    lane_by_event_id: Dict[str, int] = {}
+    for item in payload.get("lanes", []):
+        if not isinstance(item, dict):
+            continue
+        event_id = str(item.get("event_id") or item.get("id") or "")
+        if event_id not in event_ids:
+            continue
+        try:
+            lane = int(item.get("lane") or 0)
+        except (TypeError, ValueError):
+            lane = 0
+        lane_by_event_id[event_id] = max(-1, min(2, lane))
+    return lane_by_event_id
+
+
+def build_timeline_flow_edges(events: List[TimelineEvent], payload: Dict) -> List[TimelineFlowEdge]:
+    event_ids = {event.id for event in events}
     edges: List[TimelineFlowEdge] = []
     edge_keys = set()
     for item in payload.get("edges", [])[: max(len(events) * 3, 12)]:
+        if not isinstance(item, dict):
+            continue
         source_event_id = str(item.get("source_event_id") or item.get("source") or "")
         target_event_id = str(item.get("target_event_id") or item.get("target") or "")
         if source_event_id not in event_ids or target_event_id not in event_ids or source_event_id == target_event_id:
@@ -242,12 +269,11 @@ def organize_timeline_flow_with_llm(
         if key in edge_keys:
             continue
         edge_keys.add(key)
-        edge_id = str(item.get("id") or f"llm_edge_{len(edges) + 1}")[:60]
-        edges.append(TimelineFlowEdge(id=edge_id, source_event_id=source_event_id, target_event_id=target_event_id))
+        edges.append(TimelineFlowEdge(id=f"llm_edge_{len(edges) + 1}", source_event_id=source_event_id, target_event_id=target_event_id))
     if not edges:
         for index, event in enumerate(events[:-1]):
             edges.append(TimelineFlowEdge(id=f"llm_edge_{index + 1}", source_event_id=event.id, target_event_id=events[index + 1].id))
-    return TimelineFlowLayout(project_id=project_id, positions=positions, edges=edges)
+    return edges
 
 
 def call_llm_timeline_organizer(events: List[TimelineEvent], config: LLMExtractionConfig) -> Dict:

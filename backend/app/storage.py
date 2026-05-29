@@ -329,6 +329,7 @@ class SQLiteStore:
         return parse_one(TimelineFlowLayout, row["data"])
 
     def save_timeline_flow_layout(self, layout: TimelineFlowLayout) -> TimelineFlowLayout:
+        layout.has_layout = True
         with self.connect() as connection:
             connection.execute(
                 """

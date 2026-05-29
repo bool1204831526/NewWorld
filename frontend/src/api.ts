@@ -90,6 +90,7 @@ export interface TimelineFlowLayout {
   project_id: string;
   positions: TimelineFlowPosition[];
   edges: TimelineFlowEdge[];
+  has_layout: boolean;
 }
 
 export interface GraphResponse {

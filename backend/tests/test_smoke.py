@@ -356,6 +356,7 @@ def test_timeline_flow_layout_persists() -> None:
     assert response.status_code == 200
     saved = response.json()
     assert saved["project_id"] == project["id"]
+    assert saved["has_layout"] is True
     assert len(saved["positions"]) == 2
     assert saved["edges"] == [{"id": "edge_branch", "source_event_id": first["id"], "target_event_id": second["id"]}]
 
@@ -378,8 +379,10 @@ def test_delete_timeline_flow_layout() -> None:
 
     response = client.delete(f"/api/projects/{project['id']}/timeline-flow")
     assert response.status_code == 200
-    assert response.json() == {"project_id": project["id"], "positions": [], "edges": []}
-    assert client.get(f"/api/projects/{project['id']}/timeline-flow").json()["positions"] == []
+    assert response.json() == {"project_id": project["id"], "positions": [], "edges": [], "has_layout": False}
+    cleared = client.get(f"/api/projects/{project['id']}/timeline-flow").json()
+    assert cleared["positions"] == []
+    assert cleared["has_layout"] is False
 
 
 def test_organize_timeline_flow_with_llm(monkeypatch) -> None:
@@ -414,5 +417,6 @@ def test_organize_timeline_flow_with_llm(monkeypatch) -> None:
     assert response.status_code == 200
     layout = response.json()
     assert {position["event_id"] for position in layout["positions"]} == {first["id"], second["id"]}
+    assert layout["has_layout"] is True
     assert layout["edges"] == [{"id": "llm_branch", "source_event_id": first["id"], "target_event_id": second["id"]}]
     assert client.get(f"/api/projects/{project['id']}/timeline-flow").json() == layout

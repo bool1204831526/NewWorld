@@ -16,6 +16,7 @@ interface TimelineFlowEdge {
 interface TimelineFlowLayout {
   positions: Record<string, { x: number; y: number }>;
   edges: TimelineFlowEdge[];
+  hasLayout: boolean;
 }
 
 function normalizeTimelineFlowLayout(layout: ApiTimelineFlowLayout | null | undefined): TimelineFlowLayout {
@@ -28,7 +29,7 @@ function normalizeTimelineFlowLayout(layout: ApiTimelineFlowLayout | null | unde
     sourceEventId: edge.source_event_id,
     targetEventId: edge.target_event_id,
   })) ?? [];
-  return { positions, edges };
+  return { positions, edges, hasLayout: Boolean(layout?.has_layout) };
 }
 interface LLMProfile {
   id: string;
@@ -70,7 +71,7 @@ export default function App() {
   const [graph, setGraph] = useState<GraphResponse>(emptyGraph);
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [editingEventId, setEditingEventId] = useState("");
-  const [timelineFlowLayout, setTimelineFlowLayout] = useState<TimelineFlowLayout>({ positions: {}, edges: [] });
+  const [timelineFlowLayout, setTimelineFlowLayout] = useState<TimelineFlowLayout>({ positions: {}, edges: [], hasLayout: false });
   const [timelineEdgeSourceId, setTimelineEdgeSourceId] = useState("");
   const [timelineEdgeTargetId, setTimelineEdgeTargetId] = useState("");
   const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
@@ -123,8 +124,9 @@ export default function App() {
   const timelineFlow = useMemo(() => {
     const saved = timelineFlowLayout;
     const positions: Record<string, { x: number; y: number }> = {};
+    if (!saved.hasLayout) return { positions, edges: [], hasLayout: false };
     events.forEach((event, index) => {
-      positions[event.id] = saved.positions[event.id] ?? { x: 320 + (index % 2) * 180, y: 70 + index * 180 };
+      positions[event.id] = saved.positions[event.id] ?? { x: 320, y: 70 + index * 180 };
     });
     const eventIds = new Set(events.map((event) => event.id));
     const defaultEdges: TimelineFlowEdge[] = events.slice(0, -1).map((event, index) => ({
@@ -140,7 +142,7 @@ export default function App() {
       edgeKeys.add(key);
       return true;
     });
-    return { positions, edges };
+    return { positions, edges, hasLayout: true };
   }, [events, timelineFlowLayout]);
 
   const timelineFlowEventById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
@@ -151,6 +153,7 @@ export default function App() {
     setTimelineFlowLayout(nextLayout);
     const payload: ApiTimelineFlowLayout = {
       project_id: projectId,
+      has_layout: nextLayout.hasLayout,
       positions: Object.entries(nextLayout.positions).map(([event_id, position]) => ({
         event_id,
         x: position.x,
@@ -176,6 +179,7 @@ export default function App() {
   function moveTimelineEvent(eventId: string, x: number, y: number) {
     updateTimelineFlowLayout((layout) => ({
       ...layout,
+      hasLayout: true,
       positions: { ...layout.positions, [eventId]: { x: Math.max(30, x), y: Math.max(30, y) } },
     }));
   }
@@ -194,6 +198,7 @@ export default function App() {
       if (exists) return layout;
       return {
         ...layout,
+        hasLayout: true,
         edges: [...layout.edges, { id: `edge_${Date.now()}`, sourceEventId: timelineEdgeSourceId, targetEventId: timelineEdgeTargetId }],
       };
     });
@@ -367,7 +372,7 @@ export default function App() {
       setSources([]);
       setGraph(emptyGraph);
       setEvents([]);
-      setTimelineFlowLayout({ positions: {}, edges: [] });
+      setTimelineFlowLayout({ positions: {}, edges: [], hasLayout: false });
       setLoreEntries([]);
       setReport(null);
       setSelectedSourceIds([]);
