@@ -93,6 +93,27 @@ export interface TimelineFlowLayout {
   has_layout: boolean;
 }
 
+export interface StoryLane {
+  id: string;
+  name: string;
+  type: string;
+  order: number;
+}
+
+export interface TimelinePlacement {
+  event_id: string;
+  lane_id: string;
+  sort_order: number;
+  stage: string;
+}
+
+export interface TimelineBoard {
+  project_id: string;
+  lanes: StoryLane[];
+  placements: TimelinePlacement[];
+  mode: string;
+}
+
 export interface GraphResponse {
   nodes: NodeItem[];
   relationships: Relationship[];
@@ -163,6 +184,11 @@ export const api = {
     payload: { source_node_id: string; target_node_id: string; type: string; summary: string },
   ) => request<Relationship>(`/projects/${projectId}/relationships`, { method: "POST", body: JSON.stringify(payload) }),
   getTimeline: (projectId: string) => request<TimelineEvent[]>(`/projects/${projectId}/timeline`),
+  getTimelineBoard: (projectId: string) => request<TimelineBoard>(`/projects/${projectId}/timeline-board`),
+  saveTimelineBoard: (projectId: string, payload: TimelineBoard) =>
+    request<TimelineBoard>(`/projects/${projectId}/timeline-board`, { method: "PUT", body: JSON.stringify(payload) }),
+  organizeTimelineBoard: (projectId: string, payload: { mode: "rules" | "llm" | "manual"; llm?: LLMConfigPayload | null }) =>
+    request<TimelineBoard>(`/projects/${projectId}/timeline-board/organize`, { method: "POST", body: JSON.stringify(payload) }),
   getTimelineFlow: (projectId: string) => request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`),
   saveTimelineFlow: (projectId: string, payload: TimelineFlowLayout) =>
     request<TimelineFlowLayout>(`/projects/${projectId}/timeline-flow`, { method: "PUT", body: JSON.stringify(payload) }),

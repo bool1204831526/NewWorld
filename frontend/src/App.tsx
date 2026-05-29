@@ -1,9 +1,10 @@
 ﻿import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { BookOpen, GitBranch, Layers3, Network, Play, Plus, ScrollText, Sparkles } from "lucide-react";
-import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineEvent, TimelineFlowLayout as ApiTimelineFlowLayout, api } from "./api";
+import { GraphResponse, LoreEntry, PredictionReport, Project, Source, TimelineBoard, TimelineEvent, TimelineFlowLayout as ApiTimelineFlowLayout, api } from "./api";
 import "./styles.css";
 
 const emptyGraph: GraphResponse = { nodes: [], relationships: [] };
+const emptyTimelineBoard: TimelineBoard = { project_id: "", lanes: [], placements: [], mode: "manual" };
 
 const LLM_PROFILE_STORAGE_KEY = "newworld.llmProfiles";
 
@@ -72,6 +73,9 @@ export default function App() {
   const [events, setEvents] = useState<TimelineEvent[]>([]);
   const [editingEventId, setEditingEventId] = useState("");
   const [timelineFlowLayout, setTimelineFlowLayout] = useState<TimelineFlowLayout>({ positions: {}, edges: [], hasLayout: false });
+  const [timelineBoard, setTimelineBoard] = useState<TimelineBoard>(emptyTimelineBoard);
+  const [timelineMode, setTimelineMode] = useState<"llm" | "rules" | "manual">("manual");
+  const [newLaneName, setNewLaneName] = useState("");
   const [timelineEdgeSourceId, setTimelineEdgeSourceId] = useState("");
   const [timelineEdgeTargetId, setTimelineEdgeTargetId] = useState("");
   const [selectedTimelineEdgeId, setSelectedTimelineEdgeId] = useState("");
@@ -143,6 +147,26 @@ export default function App() {
   }, [events, timelineFlowLayout]);
 
   const timelineFlowEventById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
+
+  const timelineEventById = useMemo(() => new Map(events.map((event) => [event.id, event])), [events]);
+  const timelineBoardView = useMemo(() => {
+    const placements = timelineBoard.placements.length > 0
+      ? timelineBoard.placements
+      : events.map((event, index) => ({ event_id: event.id, lane_id: "lane_main", sort_order: index, stage: event.time_label }));
+    const lanes = timelineBoard.lanes.length > 0
+      ? [...timelineBoard.lanes].sort((left, right) => left.order - right.order)
+      : [{ id: "lane_main", name: "??", type: "main", order: 0 }];
+    const placementsByLane = new Map(lanes.map((lane) => [lane.id, [] as typeof placements]));
+    placements.forEach((placement) => {
+      if (!timelineEventById.has(placement.event_id)) return;
+      const laneId = placementsByLane.has(placement.lane_id) ? placement.lane_id : lanes[0]?.id;
+      if (!laneId) return;
+      placementsByLane.get(laneId)?.push(placement);
+    });
+    placementsByLane.forEach((items) => items.sort((left, right) => left.sort_order - right.sort_order));
+    return { lanes, placementsByLane };
+  }, [events, timelineBoard, timelineEventById]);
+
 
 
   async function saveTimelineFlowLayout(nextLayout: TimelineFlowLayout) {
@@ -244,6 +268,55 @@ export default function App() {
     }, "LLM 已重置时间线流程图", true).finally(() => setOrganizingTimeline(false));
   }
 
+  function handleOrganizeTimelineBoard(mode: "llm" | "rules" | "manual") {
+    setTimelineMode(mode);
+    if (mode === "manual") {
+      setStatus("已切换为手动整理");
+      return;
+    }
+    setOrganizingTimeline(true);
+    runAction(async () => {
+      const projectId = requireProject();
+      const board = await api.organizeTimelineBoard(projectId, {
+        mode,
+        llm: mode === "llm" ? getLLMConfigPayload() : null,
+      });
+      setTimelineBoard(board);
+    }, mode === "llm" ? "LLM 已整理故事线" : "规则已整理故事线", true).finally(() => setOrganizingTimeline(false));
+  }
+
+  function saveTimelineBoard(nextBoard: TimelineBoard) {
+    setTimelineBoard(nextBoard);
+    api.saveTimelineBoard(requireProject(), nextBoard).catch((error) => setStatus(error instanceof Error ? error.message : "故事线保存失败"));
+  }
+
+  function handleAddTimelineLane() {
+    const name = newLaneName.trim();
+    if (!name) return;
+    const lane = { id: "lane_" + Date.now(), name, type: "branch", order: timelineBoardView.lanes.length };
+    saveTimelineBoard({ ...timelineBoard, project_id: requireProject(), mode: "manual", lanes: [...timelineBoardView.lanes, lane] });
+    setNewLaneName("");
+  }
+
+  function handleDeleteTimelineLane(laneId: string) {
+    if (laneId === "lane_main" || timelineBoardView.lanes.length <= 1) return;
+    const fallbackLaneId = timelineBoardView.lanes.find((lane) => lane.id !== laneId)?.id ?? "lane_main";
+    saveTimelineBoard({
+      ...timelineBoard,
+      project_id: requireProject(),
+      mode: "manual",
+      lanes: timelineBoardView.lanes.filter((lane) => lane.id !== laneId),
+      placements: timelineBoard.placements.map((placement) => placement.lane_id === laneId ? { ...placement, lane_id: fallbackLaneId } : placement),
+    });
+  }
+
+  function handleMoveEventToLane(eventId: string, laneId: string) {
+    const existing = timelineBoard.placements.find((placement) => placement.event_id === eventId);
+    const nextPlacements = existing
+      ? timelineBoard.placements.map((placement) => placement.event_id === eventId ? { ...placement, lane_id: laneId } : placement)
+      : [...timelineBoard.placements, { event_id: eventId, lane_id: laneId, sort_order: timelineBoard.placements.length, stage: "" }];
+    saveTimelineBoard({ ...timelineBoard, project_id: requireProject(), mode: "manual", lanes: timelineBoardView.lanes, placements: nextPlacements });
+  }
   const graphLayout = useMemo(() => {
     const width = 900;
     const height = 520;
@@ -302,18 +375,20 @@ export default function App() {
   }, [graph.nodes, graph.relationships, relationshipLabels, selectedNode, selectedRelationships]);
 
   async function refreshProject(projectId: string) {
-    const [nextSources, nextGraph, nextEvents, nextLore, nextTimelineFlow] = await Promise.all([
+    const [nextSources, nextGraph, nextEvents, nextLore, nextTimelineFlow, nextTimelineBoard] = await Promise.all([
       api.listSources(projectId),
       api.getGraph(projectId),
       api.getTimeline(projectId),
       api.getLore(projectId),
       api.getTimelineFlow(projectId),
+      api.getTimelineBoard(projectId),
     ]);
     setSources(nextSources);
     setGraph(nextGraph);
     setEvents(nextEvents);
     setLoreEntries(nextLore);
     setTimelineFlowLayout(normalizeTimelineFlowLayout(nextTimelineFlow));
+    setTimelineBoard(nextTimelineBoard);
   }
 
   async function loadProjects() {
@@ -391,6 +466,7 @@ export default function App() {
       setGraph(emptyGraph);
       setEvents([]);
       setTimelineFlowLayout({ positions: {}, edges: [], hasLayout: false });
+      setTimelineBoard({ ...emptyTimelineBoard, project_id: project.id });
       setLoreEntries([]);
       setReport(null);
       setSelectedSourceIds([]);
@@ -884,74 +960,50 @@ export default function App() {
           ) : null}
           {activeView === "timeline" ? (
           <section className="panel timeline-panel">
-            <div className="section-head"><h2>时间发展线</h2><span>{events.length} 个事件 · 竖向流程图</span></div>
-            <div className="timeline-flow-tools">
-              <select value={timelineEdgeSourceId} onChange={(event) => setTimelineEdgeSourceId(event.target.value)}>
-                <option value="">分支起点</option>
-                {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
-              </select>
-              <select value={timelineEdgeTargetId} onChange={(event) => setTimelineEdgeTargetId(event.target.value)}>
-                <option value="">分支终点</option>
-                {events.map((event) => <option key={event.id} value={event.id}>{event.title}</option>)}
-              </select>
-              <button disabled={!timelineEdgeSourceId || !timelineEdgeTargetId || timelineEdgeSourceId === timelineEdgeTargetId} onClick={handleAddTimelineEdge} type="button">添加分支线</button>
-              <button disabled={busy || organizingTimeline || events.length === 0} onClick={handleResetTimelineFlow} type="button">{organizingTimeline ? "整理中..." : "LLM 重置布局"}</button>
-              <button disabled={busy || organizingTimeline} onClick={handleDeleteTimelineFlow} type="button">删除布局</button>
+            <div className="section-head"><h2>时间发展线</h2><span>{events.length} 个事件 · {timelineBoardView.lanes.length} 条故事线</span></div>
+            <div className="timeline-board-tools">
+              <button className={timelineMode === "llm" ? "active" : ""} disabled={busy || organizingTimeline || events.length === 0} onClick={() => handleOrganizeTimelineBoard("llm")} type="button">{organizingTimeline && timelineMode === "llm" ? "整理中..." : "LLM 整理"}</button>
+              <button className={timelineMode === "rules" ? "active" : ""} disabled={busy || organizingTimeline || events.length === 0} onClick={() => handleOrganizeTimelineBoard("rules")} type="button">规则整理</button>
+              <button className={timelineMode === "manual" ? "active" : ""} disabled={busy || organizingTimeline} onClick={() => handleOrganizeTimelineBoard("manual")} type="button">手动整理</button>
+              <input onChange={(event) => setNewLaneName(event.target.value)} placeholder="新增故事线，例如：王城线" value={newLaneName} />
+              <button disabled={!newLaneName.trim()} onClick={handleAddTimelineLane} type="button">新增故事线</button>
             </div>
-            <div className="timeline-flow-canvas">
-              {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : (
-                <>
-                  <svg className="timeline-flow-lines" width="980" height={Math.max(520, events.length * 190 + 120)}>
-                    <defs>
-                      <marker id="timeline-arrow" markerHeight="10" markerWidth="10" orient="auto" refX="9" refY="5">
-                        <path d="M0,0 L10,5 L0,10 Z" />
-                      </marker>
-                    </defs>
-                    {timelineFlow.edges.map((edge) => {
-                      const source = timelineFlow.positions[edge.sourceEventId];
-                      const target = timelineFlow.positions[edge.targetEventId];
-                      const custom = !edge.id.startsWith("default_");
-                      if (!source || !target) return null;
-                      const x1 = source.x + 120;
-                      const y1 = source.y + 120;
-                      const x2 = target.x + 120;
-                      const y2 = target.y;
-                      const midY = (y1 + y2) / 2;
-                      const selected = selectedTimelineEdgeId === edge.id;
-                      return <path className={selected ? "timeline-flow-line selected" : custom ? "timeline-flow-line custom" : "timeline-flow-line"} d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`} key={edge.id} markerEnd="url(#timeline-arrow)" onClick={() => setSelectedTimelineEdgeId(edge.id)} />;
-                    })}
-                  </svg>
-                  {events.map((event) => {
-                    const position = timelineFlow.positions[event.id] ?? { x: 320, y: 80 };
-                    return (
-                      <button
-                        className={editingEventId === event.id ? "timeline-node active" : "timeline-node"}
-                        draggable
-                        key={event.id}
-                        onClick={() => { setEditingEventId(event.id); setSelectedTimelineEdgeId(""); }}
-                        onDragEnd={(dragEvent) => handleTimelineNodeDrag(event.id, dragEvent)}
-                        style={{ left: position.x, top: position.y }}
-                        type="button"
-                      >
-                        <time>{event.time_label}</time>
-                        <strong>{event.title}</strong>
-                        <p>{event.description || "暂无描述"}</p>
-                      </button>
-                    );
-                  })}
-                </>
-              )}
-            </div>
+            {events.length === 0 ? <p className="empty">暂无时间线事件。导入资料并抽取后会自动生成。</p> : (
+              <div className="timeline-board">
+                {timelineBoardView.lanes.map((lane) => (
+                  <section className="timeline-lane" key={lane.id}>
+                    <div className="timeline-lane-head"><strong>{lane.name}</strong><span>{lane.type}</span>{lane.id !== "lane_main" ? <button className="danger subtle" onClick={() => handleDeleteTimelineLane(lane.id)} type="button">删除线</button> : null}</div>
+                    <div className="timeline-lane-events">
+                      {(timelineBoardView.placementsByLane.get(lane.id) ?? []).map((placement) => {
+                        const event = timelineEventById.get(placement.event_id);
+                        if (!event) return null;
+                        return (
+                          <article className={editingEventId === event.id ? "timeline-card active" : "timeline-card"} key={event.id} onClick={() => setEditingEventId(event.id)}>
+                            <time>{event.time_label}</time>
+                            <strong>{event.title}</strong>
+                            <p>{event.description || "暂无描述"}</p>
+                            <select onClick={(selectEvent) => selectEvent.stopPropagation()} onChange={(changeEvent) => handleMoveEventToLane(event.id, changeEvent.target.value)} value={placement.lane_id}>
+                              {timelineBoardView.lanes.map((option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+                            </select>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            )}
             {editingEvent ? (
               <form className="timeline-editor" onSubmit={handleUpdateTimelineEvent}>
-                <strong>修改流程节点</strong>
+                <strong>修改事件</strong>
                 <input name="editEventTitle" defaultValue={editingEvent.title} placeholder="事件标题" />
                 <input name="editTimeLabel" defaultValue={editingEvent.time_label} placeholder="时间，例如：第一章" />
                 <input name="editTimeOrder" defaultValue={editingEvent.time_order} type="number" placeholder="排序数字" />
                 <textarea name="editEventDescription" defaultValue={editingEvent.description} placeholder="事件描述" />
                 <div className="button-row">
                   <button disabled={busy} type="submit">保存修改</button>
-                  <button disabled={busy} onClick={() => setEditingEventId("")} type="button">取消</button>
+                  <button disabled={busy} onClick={() => setEditingEventId("")} type="button">??</button>
+                  <button className="danger" disabled={busy} onClick={handleDeleteEditingTimelineEvent} type="button">删除事件</button>
                 </div>
               </form>
             ) : null}

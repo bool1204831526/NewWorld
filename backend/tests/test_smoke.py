@@ -450,3 +450,31 @@ def test_delete_timeline_event_cleans_flow_layout() -> None:
     layout = client.get(f"/api/projects/{project['id']}/timeline-flow").json()
     assert layout["positions"] == [{"event_id": second["id"], "x": 320.0, "y": 260.0}]
     assert layout["edges"] == []
+
+
+def test_timeline_board_rules_organize() -> None:
+    project_response = client.post("/api/projects", json={"name": "故事线规则整理测试"})
+    project = project_response.json()
+    node = client.post(
+        f"/api/projects/{project['id']}/nodes",
+        json={"name": "林曜", "type": "人物", "summary": "北境少年。"},
+    ).json()
+    first = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "入城", "time_label": "第一章", "time_order": 1, "description": "林曜进入王城。", "participant_node_ids": [node["id"]]},
+    ).json()
+    second = client.post(
+        f"/api/projects/{project['id']}/timeline-events",
+        json={"title": "王印线索", "time_label": "第二章", "time_order": 2, "description": "王印线索出现。", "participant_node_ids": []},
+    ).json()
+
+    response = client.post(f"/api/projects/{project['id']}/timeline-board/organize", json={"mode": "rules"})
+    assert response.status_code == 200
+    board = response.json()
+    assert board["mode"] == "rules"
+    assert {placement["event_id"] for placement in board["placements"]} == {first["id"], second["id"]}
+    assert len(board["lanes"]) >= 1
+
+    loaded = client.get(f"/api/projects/{project['id']}/timeline-board")
+    assert loaded.status_code == 200
+    assert loaded.json() == board

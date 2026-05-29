@@ -220,6 +220,32 @@ class OrganizeTimelineFlowRequest(BaseModel):
     llm: LLMExtractionConfig
 
 
+class StoryLane(BaseModel):
+    id: str
+    name: str
+    type: str = "branch"
+    order: int = 0
+
+
+class TimelinePlacement(BaseModel):
+    event_id: str
+    lane_id: str
+    sort_order: int = 0
+    stage: str = ""
+
+
+class TimelineBoard(BaseModel):
+    project_id: str
+    lanes: List[StoryLane] = []
+    placements: List[TimelinePlacement] = []
+    mode: str = "manual"
+
+
+class OrganizeTimelineBoardRequest(BaseModel):
+    mode: str = "rules"
+    llm: Optional[LLMExtractionConfig] = None
+
+
 class GraphResponse(BaseModel):
     nodes: List[Node]
     relationships: List[Relationship]

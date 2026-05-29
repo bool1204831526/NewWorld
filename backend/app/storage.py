@@ -7,7 +7,7 @@ from typing import List, Optional, Sequence, Type, TypeVar
 
 from pydantic import BaseModel
 
-from app.schemas import LoreEntry, Node, Project, Relationship, Source, TimelineEvent, TimelineFlowLayout
+from app.schemas import LoreEntry, Node, Project, Relationship, Source, TimelineBoard, TimelineEvent, TimelineFlowLayout
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -81,6 +81,12 @@ class SQLiteStore:
                     data TEXT NOT NULL,
                     FOREIGN KEY(project_id) REFERENCES projects(id)
                 );
+
+                CREATE TABLE IF NOT EXISTS timeline_boards (
+                    project_id TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    FOREIGN KEY(project_id) REFERENCES projects(id)
+                );
                 """
             )
 
@@ -88,6 +94,7 @@ class SQLiteStore:
         with self.connect() as connection:
             connection.executescript(
                 """
+                DELETE FROM timeline_boards;
                 DELETE FROM timeline_flow_layouts;
                 DELETE FROM timeline_events;
                 DELETE FROM lore_entries;
@@ -328,6 +335,27 @@ class SQLiteStore:
                 return False
             connection.execute("DELETE FROM timeline_events WHERE id = ? AND project_id = ?", (event_id, project_id))
         return True
+
+    def get_timeline_board(self, project_id: str) -> TimelineBoard:
+        with self.connect() as connection:
+            row = connection.execute(
+                "SELECT data FROM timeline_boards WHERE project_id = ?",
+                (project_id,),
+            ).fetchone()
+        if not row:
+            return TimelineBoard(project_id=project_id)
+        return parse_one(TimelineBoard, row["data"])
+
+    def save_timeline_board(self, board: TimelineBoard) -> TimelineBoard:
+        with self.connect() as connection:
+            connection.execute(
+                """
+                INSERT INTO timeline_boards (project_id, data) VALUES (?, ?)
+                ON CONFLICT(project_id) DO UPDATE SET data = excluded.data
+                """,
+                (board.project_id, serialize(board)),
+            )
+        return board
 
     def get_timeline_flow_layout(self, project_id: str) -> TimelineFlowLayout:
         with self.connect() as connection:

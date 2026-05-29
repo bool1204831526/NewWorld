@@ -8,7 +8,7 @@ import urllib.request
 from datetime import datetime
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 
-from app.schemas import LLMExtractionConfig, LoreEntry, Node, Relationship, Source, TimelineEvent, TimelineFlowEdge, TimelineFlowLayout, TimelineFlowPosition
+from app.schemas import LLMExtractionConfig, LoreEntry, Node, Relationship, Source, StoryLane, TimelineBoard, TimelineEvent, TimelineFlowEdge, TimelineFlowLayout, TimelineFlowPosition, TimelinePlacement
 from app.storage import SQLiteStore
 
 NODE_TYPES = {
@@ -201,6 +201,113 @@ def extract_source_with_llm(
 
     return {"nodes": nodes, "relationships": relationships, "lore": lore, "events": events}
 
+
+
+
+def organize_timeline_board_with_rules(project_id: str, events: List[TimelineEvent], nodes: List[Node]) -> TimelineBoard:
+    main_lane = StoryLane(id="lane_main", name="主线", type="main", order=0)
+    lanes = [main_lane]
+    lane_by_name = {main_lane.name: main_lane}
+    node_by_id = {node.id: node for node in nodes}
+    placements: List[TimelinePlacement] = []
+    ordered_events = sorted(events, key=lambda event: (event.time_order, event.time_label, event.title))
+    for index, event in enumerate(ordered_events):
+        lane = main_lane
+        participant_names = [node_by_id[node_id].name for node_id in event.participant_node_ids if node_id in node_by_id]
+        if participant_names:
+            lane_name = f"{participant_names[0]}线"
+            lane = lane_by_name.get(lane_name)
+            if not lane:
+                lane = StoryLane(id=f"lane_{len(lanes)}", name=lane_name, type="character", order=len(lanes))
+                lane_by_name[lane_name] = lane
+                lanes.append(lane)
+        elif any(word in event.title + event.description for word in ["王城", "王印", "王位", "继承"]):
+            lane = lane_by_name.get("王城线")
+            if not lane:
+                lane = StoryLane(id="lane_royal", name="王城线", type="branch", order=len(lanes))
+                lane_by_name[lane.name] = lane
+                lanes.append(lane)
+        placements.append(TimelinePlacement(event_id=event.id, lane_id=lane.id, sort_order=index, stage=event.time_label))
+    return TimelineBoard(project_id=project_id, lanes=lanes, placements=placements, mode="rules")
+
+
+def organize_timeline_board_with_llm(project_id: str, events: List[TimelineEvent], config: LLMExtractionConfig) -> TimelineBoard:
+    if not events:
+        return TimelineBoard(project_id=project_id, mode="llm")
+    payload = call_llm_timeline_board_organizer(events, config)
+    event_ids = {event.id for event in events}
+    lanes: List[StoryLane] = []
+    seen_lane_ids = set()
+    for index, item in enumerate(payload.get("lanes", [])):
+        if not isinstance(item, dict):
+            continue
+        lane_id = str(item.get("id") or f"lane_{index}")[:40]
+        name = str(item.get("name") or "故事线")[:30]
+        if lane_id in seen_lane_ids:
+            continue
+        seen_lane_ids.add(lane_id)
+        lanes.append(StoryLane(id=lane_id, name=name, type=str(item.get("type") or "branch"), order=index))
+    if not lanes:
+        lanes = [StoryLane(id="lane_main", name="主线", type="main", order=0)]
+    lane_ids = {lane.id for lane in lanes}
+    placements: List[TimelinePlacement] = []
+    seen_event_ids = set()
+    for index, item in enumerate(payload.get("placements", [])):
+        if not isinstance(item, dict):
+            continue
+        event_id = str(item.get("event_id") or "")
+        lane_id = str(item.get("lane_id") or lanes[0].id)
+        if event_id not in event_ids or event_id in seen_event_ids:
+            continue
+        seen_event_ids.add(event_id)
+        if lane_id not in lane_ids:
+            lane_id = lanes[0].id
+        placements.append(TimelinePlacement(event_id=event_id, lane_id=lane_id, sort_order=index, stage=str(item.get("stage") or "")))
+    remaining = sorted([event for event in events if event.id not in seen_event_ids], key=lambda event: (event.time_order, event.time_label, event.title))
+    for event in remaining:
+        placements.append(TimelinePlacement(event_id=event.id, lane_id=lanes[0].id, sort_order=len(placements), stage=event.time_label))
+    return TimelineBoard(project_id=project_id, lanes=lanes, placements=placements, mode="llm")
+
+
+def call_llm_timeline_board_organizer(events: List[TimelineEvent], config: LLMExtractionConfig) -> Dict:
+    api_base = validate_llm_api_base(config.api_base)
+    api_key = validate_llm_api_key(config.api_key)
+    model = config.model.strip()
+    if not model:
+        raise ValueError("LLM 模型名不能为空")
+    url = f"{api_base}/chat/completions"
+    event_payload = [
+        {"id": event.id, "title": event.title, "time_label": event.time_label, "time_order": event.time_order, "description": event.description}
+        for event in events
+    ]
+    prompt = (
+        "你是小说故事线整理器。请只返回 JSON，不要解释。"
+        "把事件整理成多条故事线泳道，而不是流程图坐标。"
+        "JSON 字段：lanes, placements。"
+        "lanes: [{id,name,type}]?type ?? main?branch?character?faction?place?"
+        "placements: [{event_id,lane_id,sort_order,stage}]，每个事件必须出现一次。"
+    )
+    body = {"model": model, "messages": [{"role": "system", "content": prompt}, {"role": "user", "content": json.dumps({"events": event_payload}, ensure_ascii=False)}], "temperature": 0.2}
+    request = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json", "Accept": "application/json", "User-Agent": "NewWorld/0.1 OpenAI-Compatible-Client"}, method="POST")
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            response_text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        error_body = error.read().decode("utf-8", errors="ignore")
+        raise ValueError(f"LLM 接口返回 HTTP {error.code}：{extract_llm_error_message(error_body, error.code)}")
+    except urllib.error.URLError as error:
+        raise ValueError(f"无法连接 LLM 接口：{error.reason}")
+    except TimeoutError:
+        raise ValueError("LLM 请求超时，请检查网络或稍后重试")
+    try:
+        response_data = json.loads(response_text)
+        content = response_data["choices"][0]["message"]["content"]
+        parsed = json.loads(strip_json_code_fence(content))
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError(f"LLM 未返回合法故事线 JSON：{error}")
+    if not isinstance(parsed, dict):
+        raise ValueError("LLM 返回内容不是 JSON 对象")
+    return parsed
 
 
 def organize_timeline_flow_with_llm(

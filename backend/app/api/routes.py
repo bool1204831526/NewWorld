@@ -5,7 +5,7 @@ from typing import List
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
-from app.extractor import extract_world, organize_timeline_flow_with_llm
+from app.extractor import extract_world, organize_timeline_board_with_llm, organize_timeline_board_with_rules, organize_timeline_flow_with_llm
 from app.schemas import (
     CreateNodeRequest,
     CreateProjectRequest,
@@ -18,11 +18,13 @@ from app.schemas import (
     LoreEntry,
     MergeNodeRequest,
     Node,
+    OrganizeTimelineBoardRequest,
     OrganizeTimelineFlowRequest,
     PredictionReport,
     Project,
     Relationship,
     Source,
+    TimelineBoard,
     TimelineEvent,
     TimelineFlowEdge,
     TimelineFlowLayout,
@@ -275,6 +277,43 @@ def delete_timeline_event(project_id: str, event_id: str) -> dict:
         ]
         store.save_timeline_flow_layout(layout)
     return {"deleted": True, "event_id": event_id}
+
+
+@router.get("/projects/{project_id}/timeline-board")
+def get_timeline_board(project_id: str) -> TimelineBoard:
+    ensure_project(project_id)
+    return store.get_timeline_board(project_id)
+
+
+@router.put("/projects/{project_id}/timeline-board")
+def save_timeline_board(project_id: str, payload: TimelineBoard) -> TimelineBoard:
+    ensure_project(project_id)
+    event_ids = {event.id for event in store.list_timeline_events(project_id)}
+    lane_ids = {lane.id for lane in payload.lanes}
+    payload.project_id = project_id
+    payload.placements = [
+        placement for placement in payload.placements
+        if placement.event_id in event_ids and placement.lane_id in lane_ids
+    ]
+    return store.save_timeline_board(payload)
+
+
+@router.post("/projects/{project_id}/timeline-board/organize")
+def organize_timeline_board(project_id: str, payload: OrganizeTimelineBoardRequest) -> TimelineBoard:
+    ensure_project(project_id)
+    events = store.list_timeline_events(project_id)
+    if not events:
+        raise HTTPException(status_code=400, detail="没有可整理的时间线事件")
+    try:
+        if payload.mode == "llm":
+            if not payload.llm:
+                raise ValueError("LLM 整理需要填写 API 配置")
+            board = organize_timeline_board_with_llm(project_id, events, payload.llm)
+        else:
+            board = organize_timeline_board_with_rules(project_id, events, store.list_nodes(project_id))
+    except Exception as error:
+        raise HTTPException(status_code=400, detail=str(error))
+    return store.save_timeline_board(board)
 
 
 @router.get("/projects/{project_id}/timeline-flow")
